@@ -10,16 +10,20 @@
  * 「コンテナバインドスクリプト」として紐づけること。 拡張機能 > Apps Script）
  * ------------------------------------------------------------
  *
- * ■ 名簿   （ヘッダー行）: token | 名前 | 有効
- *   例: e8e183033ebb85ca4dfaf8b8 | 瑛斗 | TRUE
- *       ada5cb88c3ea6391860c3813 | 颯斗 | TRUE
+ * ■ 名簿   （ヘッダー行）: token | 名前 | 有効 | マンダラシートURL
+ *   例: e8e183033ebb85ca4dfaf8b8 | 瑛斗 | TRUE | https://docs.google.com/spreadsheets/d/xxxx/edit
+ *       ada5cb88c3ea6391860c3813 | 颯斗 | TRUE | https://docs.google.com/spreadsheets/d/yyyy/edit
+ *   「マンダラシートURL」は、MICの「マンダラチャート（選手名）」スプレッドシートを選手ごとに
+ *   コピーして作った個別シートのURL。この列を見て、どのシートを読みに行くか判断する。
  *
- * ■ シーズン目標  （ヘッダー行）: 名前 | 目標 | 期限 | 更新日
- *   1名につき1行。Vanさんが直接編集する想定（フォームは無し）。
+ * ■ シーズン目標 = MICの「目標設定シート」Googleフォームを瑛斗颯斗用にコピーしたものの回答シート
+ *   （このスプレッドシート内のタブではなく、SEASON_FORM_SS_ID で指定する別スプレッドシート
+ *   「瑛斗颯斗 目標設定シート（回答）」の「フォームの回答 1」タブを直接読みに行く）。
+ *   名前列で絞り込み、最新（一番下）の回答を「現在のシーズン目標」として返す。
  *
- * ■ マンダラ  （ヘッダー行）: 名前 | データJSON | 更新日
- *   「データJSON」列に {"center":"...", "subGoals":[{"title":"...","actions":["",... x8]}, ... x8]} を保存する。
- *   1名につき1行。空文字なら未入力として扱う。
+ * ■ マンダラ = 名簿の「マンダラシートURL」で指定された、選手ごとの個別マンダラスプレッドシート
+ *   （MICと同じ「マンダラチャート(記入用)」タブ、9x9マスのA1:I9をそのまま読み取って返す。
+ *   選手やVanさんがそのスプレッドシートを直接開いて手入力する想定。このApps Scriptは読み取り専用）。
  *
  * ■ 短期目標  （ヘッダー行）: タイムスタンプ | 名前 | 振り返り | 新しい目標 | 挑戦したい技
  *   1名につき複数行（月次で増えていく）。将来Googleフォームの回答先をこのタブにしても良い
@@ -36,14 +40,32 @@
  * デプロイ: 拡張機能 > Apps Script > 右上「デプロイ」>「新しいデプロイ」
  *   種類: ウェブアプリ / 実行ユーザー: 自分 / アクセスできるユーザー: 全員
  *   発行されたURL（.../exec）を karte/index.html の API_URL に設定する。
+ *   コードを更新した場合は「デプロイを管理」>編集(鉛筆)>「新しいバージョン」で再デプロイすること。
  */
 
 var SHEET_ROSTER = '名簿';
-var SHEET_SEASON = 'シーズン目標';
-var SHEET_MANDALA = 'マンダラ';
 var SHEET_STG = '短期目標';
 var SHEET_AIRLOG = '技記録ログ';
 var SHEET_COACHNOTES = 'コーチメモ';
+
+// MICの「目標設定シート」Googleフォームを瑛斗颯斗用にコピーした際の回答スプレッドシートID
+var SEASON_FORM_SS_ID = '1Xezq36_rQNOXxralFgeWdJTL7bpA_wLtFqSFCgBt3kc';
+var MANDALA_SHEET_TAB = 'マンダラチャート(記入用)';
+
+// 自己分析（5段階評価）の項目名（フォームの質問見出しの「先頭一致」で列を特定する）
+var SEASON_SELF_RATING_LABELS = [
+  '宙返り技術', 'ひねり技術', '高さ・跳躍力', '精密性',
+  '体力', '筋力', '柔軟性', 'メンタル', '練習への取り組み', '自主性', 'コミュニケーション', 'コンディショニング'
+];
+// 今年の目標（6カテゴリ）
+var SEASON_GOAL_LABELS = [
+  ['成績', '今年達成したい大会成績'],
+  ['技術', '今年伸ばしたい技術'],
+  ['フィジカル', '今年伸ばしたい身体能力'],
+  ['メンタル', '今年強くしたいこと'],
+  ['学校生活', '学校で頑張りたいこと'],
+  ['人間性', '競技以外で成長したいこと']
+];
 
 function getSheet_(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -130,30 +152,107 @@ function handleResolver_(e) {
   return { name: name, token: token };
 }
 
+// ヘッダー名の「先頭一致」で列インデックス(0始まり)を探す。無ければ-1。
+function findColByPrefix_(headers, prefix) {
+  for (var i = 0; i < headers.length; i++) {
+    if (String(headers[i]).indexOf(prefix) === 0) return i;
+  }
+  return -1;
+}
+
+// 任意のSheetオブジェクトを、ヘッダー行をキーにしたオブジェクトの配列にして返す
+function readRowsFromSheet_(sh) {
+  var values = sh.getDataRange().getValues();
+  if (values.length < 1) return [];
+  var headers = values[0];
+  var rows = [];
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var blank = row.every(function (c) { return c === '' || c === null; });
+    if (blank) continue;
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) obj[headers[j]] = row[j];
+    rows.push(obj);
+  }
+  return { headers: headers, rows: rows };
+}
+
 function handleSeason_(e) {
   var name = findAthleteNameByToken_(e.parameter.token);
   if (!name) return { error: 'invalid_token' };
-  var rows = readRows_(SHEET_SEASON).filter(function (r) { return r['名前'] === name; });
-  if (!rows.length) return { name: name, goal: null, deadline: null, updatedAt: null };
-  var r = rows[rows.length - 1];
-  return { name: name, goal: r['目標'] || null, deadline: r['期限'] || null, updatedAt: r['更新日'] || null };
+  var ss = SpreadsheetApp.openById(SEASON_FORM_SS_ID);
+  var sh = ss.getSheets()[0]; // フォームの回答が入る最初のタブ
+  var parsed = readRowsFromSheet_(sh);
+  var headers = parsed.headers;
+  var rows = parsed.rows.filter(function (r) { return r['名前'] === name; });
+  if (!rows.length) return { name: name, hasEntry: false };
+  var r = rows[rows.length - 1]; // 最新の回答
+
+  var goals = {};
+  SEASON_GOAL_LABELS.forEach(function (pair) {
+    var key = pair[0], prefix = pair[1];
+    var col = findColByPrefix_(headers, prefix);
+    goals[key] = col >= 0 ? (r[headers[col]] || null) : null;
+  });
+
+  var selfRatings = SEASON_SELF_RATING_LABELS.map(function (label) {
+    var col = findColByPrefix_(headers, label);
+    var val = col >= 0 ? r[headers[col]] : null;
+    return { label: label, score: val === '' || val === null || val === undefined ? null : Number(val) };
+  });
+
+  var topCol = findColByPrefix_(headers, '上記');
+  var topTwo = topCol >= 0 && r[headers[topCol]] ? String(r[headers[topCol]]).split(',').map(function (s) { return s.trim(); }) : [];
+
+  function pickByPrefix(prefix) {
+    var col = findColByPrefix_(headers, prefix);
+    return col >= 0 ? (r[headers[col]] || null) : null;
+  }
+  var competitionPlans = {
+    thisSeasonRule: pickByPrefix('今シーズン大会で使う予定の演技(規定演技)'),
+    thisSeasonFree: pickByPrefix('今シーズン大会で使う予定の演技(自由演技)'),
+    nextSeasonRule: pickByPrefix('来シーズン大会で使う予定の演技(規定演技)'),
+    nextSeasonFree: pickByPrefix('来シーズン大会で使う予定の演技(自由演技)')
+  };
+
+  return {
+    name: name,
+    hasEntry: true,
+    timestamp: r['タイムスタンプ'] || null,
+    goals: goals,
+    selfRatings: selfRatings,
+    topTwo: topTwo,
+    competitionPlans: competitionPlans
+  };
 }
 
 function handleMandala_(e) {
   var name = findAthleteNameByToken_(e.parameter.token);
   if (!name) return { error: 'invalid_token' };
-  var rows = readRows_(SHEET_MANDALA).filter(function (r) { return r['名前'] === name; });
-  if (!rows.length || !rows[rows.length - 1]['データJSON']) {
-    return { name: name, center: null, subGoals: null, updatedAt: null };
-  }
-  var r = rows[rows.length - 1];
-  var data;
+  var rosterRows = readRows_(SHEET_ROSTER);
+  var athleteRow = rosterRows.filter(function (r) { return r['名前'] === name; })[0];
+  var url = athleteRow && athleteRow['マンダラシートURL'];
+  if (!url) return { name: name, grid: null, editUrl: null };
+
+  var mandalaSs;
   try {
-    data = JSON.parse(r['データJSON']);
+    mandalaSs = SpreadsheetApp.openByUrl(url);
   } catch (err) {
-    return { name: name, center: null, subGoals: null, updatedAt: null, error: 'マンダラJSONの解析に失敗しました' };
+    return { name: name, grid: null, editUrl: url, error: 'マンダラシートを開けませんでした: ' + err };
   }
-  return { name: name, center: data.center || null, subGoals: data.subGoals || null, updatedAt: r['更新日'] || null };
+  var sh = mandalaSs.getSheetByName(MANDALA_SHEET_TAB);
+  if (!sh) return { name: name, grid: null, editUrl: url, error: 'マンダラシートのタブ「' + MANDALA_SHEET_TAB + '」が見つかりません' };
+
+  var grid = sh.getRange(1, 1, 9, 9).getValues();
+  var hasContent = grid.some(function (row) { return row.some(function (c) { return c !== '' && c !== null; }); });
+
+  var updatedAt = null;
+  try {
+    var m = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (m) updatedAt = DriveApp.getFileById(m[1]).getLastUpdated();
+  } catch (err2) { /* 取得できなければ無視 */ }
+
+  return { name: name, grid: hasContent ? grid : null, editUrl: url, updatedAt: updatedAt };
 }
 
 function handleStg_(e) {

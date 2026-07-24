@@ -73,17 +73,25 @@
   label.lbl { font-size: 11.5px; color: var(--text-muted); display: block; margin-top: 10px; }
   label.lbl:first-child { margin-top: 0; }
 
-  /* mandala */
-  .mandala-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  .mandala-cell {
-    background: var(--accent-soft); border-radius: 8px; padding: 8px 6px; min-height: 56px;
-    font-size: 11px; line-height: 1.35; display: flex; align-items: center; justify-content: center;
-    text-align: center; cursor: pointer; transition: transform 0.08s ease;
+  /* mandala (9x9 live grid, MIC方式) */
+  .mandala-grid9 { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; background: var(--gridline); border: 1px solid var(--gridline); border-radius: 8px; overflow: hidden; }
+  .mandala-cell9 {
+    background: var(--surface-1); padding: 4px 2px; min-height: 40px;
+    font-size: 8.5px; line-height: 1.2; display: flex; align-items: center; justify-content: center;
+    text-align: center; word-break: break-all;
   }
-  .mandala-cell.center { background: var(--gold-soft); font-weight: 700; color: var(--gold-text); cursor: default; }
-  .mandala-cell:active { transform: scale(0.96); }
-  .mandala-cell.empty { color: var(--text-muted); font-style: italic; }
-  .mandala-back { font-size: 12.5px; color: var(--blue-450); font-weight: 700; margin-bottom: 8px; cursor: pointer; }
+  .mandala-cell9.center-goal { background: var(--gold-soft); font-weight: 700; color: var(--gold-text); font-size: 9px; }
+  .mandala-cell9.block-center { background: var(--accent-soft); font-weight: 700; color: var(--blue-550); }
+  .mandala-cell9.empty { color: var(--text-muted); }
+  .mandala-link { font-size: 12.5px; color: var(--blue-450); font-weight: 700; margin-top: 10px; display: inline-block; }
+  .rating-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-top: 1px solid var(--gridline); font-size: 13px; }
+  .rating-row:first-child { border-top: none; }
+  .rating-row .rn { color: var(--text-secondary); }
+  .rating-row .rv { font-weight: 700; color: var(--blue-550); }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .chip { background: var(--accent-soft); color: var(--blue-550); font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+  .subhead { font-size: 12px; font-weight: 700; color: var(--text-secondary); margin: 12px 0 4px; }
+  .subhead:first-child { margin-top: 0; }
 
   /* airlog list */
   .log-row { padding: 8px 0; border-top: 1px solid var(--gridline); display: flex; justify-content: space-between; gap: 8px; }
@@ -134,7 +142,6 @@ var stgCache = {};
 var airlogCache = {};
 var notesCache = {};
 
-var mandalaDrill = {};    // name -> サブ目標index(0-7) or null
 var airlogFormOpen = {};  // name -> bool
 var airlogDraft = {};     // name -> {group, skill, custom, reps, success, memo, videoUrl}
 var noteDraft = {};       // name -> テキスト
@@ -217,9 +224,6 @@ window.selectAthlete = function (name) {
   loadAllFor(name);
 };
 
-window.mandalaSelectSub = function (idx) { mandalaDrill[current] = idx; render(); };
-window.mandalaBack = function () { mandalaDrill[current] = null; render(); };
-
 window.toggleAirlogForm = function () {
   airlogFormOpen[current] = !airlogFormOpen[current];
   if (!airlogDraft[current]) airlogDraft[current] = { group: SKILL_GROUPS[0].label, skill: SKILL_GROUPS[0].skills[0], custom: "", reps: "", success: "", memo: "", videoUrl: "" };
@@ -277,11 +281,37 @@ function renderSeasonCard(name) {
   else {
     var d = c.data;
     if (d.error) body = '<div class="muted">' + escHtml(d.error) + '</div>';
-    else if (!d.goal) body = '<div class="muted">まだシーズン目標が登録されていません</div>';
-    else body =
-      '<div class="field"><div class="k">シーズン目標</div><div class="v">' + escHtml(d.goal) + '</div></div>' +
-      (d.deadline ? '<div class="field"><div class="k">期限</div><div class="v">' + escHtml(d.deadline) + '</div></div>' : '') +
-      (d.updatedAt ? '<div class="field"><div class="k">更新日</div><div class="v">' + escHtml(d.updatedAt) + '</div></div>' : '');
+    else if (!d.hasEntry) body = '<div class="muted">まだシーズン目標が登録されていません</div>';
+    else {
+      var GOAL_LABELS = { "成績": "今年達成したい大会成績", "技術": "今年伸ばしたい技術", "フィジカル": "今年伸ばしたい身体能力", "メンタル": "今年強くしたいこと", "学校生活": "学校で頑張りたいこと", "人間性": "競技以外で成長したいこと" };
+      var goals = d.goals || {};
+      var goalsHtml = Object.keys(GOAL_LABELS).map(function (key) {
+        var v = goals[key];
+        if (!v) return "";
+        return '<div class="field"><div class="k">' + escHtml(GOAL_LABELS[key]) + '（' + escHtml(key) + '）</div><div class="v">' + escHtml(v) + '</div></div>';
+      }).join("");
+
+      var ratings = d.selfRatings || [];
+      var ratingsHtml = ratings.length ? '<div class="subhead">自己分析（5段階評価）</div>' + ratings.map(function (r) {
+        return '<div class="rating-row"><span class="rn">' + escHtml(r.label) + '</span><span class="rv">' + (r.score == null ? "-" : r.score) + ' / 5</span></div>';
+      }).join("") : "";
+
+      var topTwoHtml = (d.topTwo && d.topTwo.length) ? '<div class="subhead">特に伸ばしたい項目</div><div class="chip-row">' + d.topTwo.map(function (t) { return '<span class="chip">' + escHtml(t) + '</span>'; }).join("") + '</div>' : "";
+
+      var cp = d.competitionPlans || {};
+      var cpRows = [
+        ["今シーズン・規定演技", cp.thisSeasonRule],
+        ["今シーズン・自由演技", cp.thisSeasonFree],
+        ["来シーズン・規定演技", cp.nextSeasonRule],
+        ["来シーズン・自由演技", cp.nextSeasonFree]
+      ].filter(function (p) { return p[1]; });
+      var cpHtml = cpRows.length ? '<div class="subhead">大会使用予定の演技</div>' + cpRows.map(function (p) {
+        return '<div class="field"><div class="k">' + escHtml(p[0]) + '</div><div class="v">' + escHtml(p[1]) + '</div></div>';
+      }).join("") : "";
+
+      body = goalsHtml + ratingsHtml + topTwoHtml + cpHtml +
+        (d.timestamp ? '<div class="field" style="margin-top:10px;"><div class="k">記入日</div><div class="v">' + escHtml(fmtDate(d.timestamp)) + '</div></div>' : "");
+    }
   }
   return cardWrap("", "シーズン目標", body);
 }
@@ -293,37 +323,28 @@ function renderMandalaCard(name) {
   else if (c.status === "error") body = '<div class="muted">読み込みに失敗しました</div>';
   else {
     var d = c.data;
-    if (!d.center && !d.subGoals) body = '<div class="muted">まだマンダラチャートが作成されていません</div>';
-    else {
-      var drill = mandalaDrill[name];
-      if (drill === undefined) drill = null;
-      if (drill !== null && d.subGoals && d.subGoals[drill]) {
-        var sub = d.subGoals[drill];
-        var cells = '<div class="mandala-back" onclick="mandalaBack()">← 全体に戻る</div><div class="mandala-grid">';
-        var actions = sub.actions || [];
-        for (var i = 0; i < 4; i++) cells += mandalaCellHtml(actions[i], false, null);
-        cells += '<div class="mandala-cell center">' + escHtml(sub.title || "(未設定)") + '</div>';
-        for (var j = 4; j < 8; j++) cells += mandalaCellHtml(actions[j], false, null);
-        cells += '</div>';
-        body = cells;
-      } else {
-        var subGoals = d.subGoals || [];
-        var grid = '<div class="mandala-grid">';
-        for (var k = 0; k < 4; k++) grid += mandalaCellHtml(subGoals[k] && subGoals[k].title, true, k);
-        grid += '<div class="mandala-cell center">' + escHtml(d.center || "(未設定)") + '</div>';
-        for (var m = 4; m < 8; m++) grid += mandalaCellHtml(subGoals[m] && subGoals[m].title, true, m);
-        grid += '</div>';
-        body = grid;
+    if (d.error) body = '<div class="muted">' + escHtml(d.error) + '</div>';
+    else if (!d.grid) {
+      body = '<div class="muted">まだマンダラチャートが作成されていません</div>' +
+        (d.editUrl ? '<a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">＋ マンダラシートを開いて記入する</a>' : "");
+    } else {
+      var grid = d.grid;
+      var cells = "";
+      for (var r = 0; r < 9; r++) {
+        for (var col = 0; col < 9; col++) {
+          var text = grid[r][col];
+          var isCenter = (r === 4 && col === 4);
+          var isBlockCenter = !isCenter && (r % 3 === 1) && (col % 3 === 1);
+          var cls = "mandala-cell9" + (isCenter ? " center-goal" : isBlockCenter ? " block-center" : "") + (!text ? " empty" : "");
+          cells += '<div class="' + cls + '">' + escHtml(text || "") + '</div>';
+        }
       }
+      body = '<div class="mandala-grid9">' + cells + '</div>' +
+        (d.updatedAt ? '<div class="field" style="margin-top:10px;"><div class="k">更新日</div><div class="v">' + escHtml(fmtDate(d.updatedAt)) + '</div></div>' : "") +
+        (d.editUrl ? '<a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">シートを開いて編集する</a>' : "");
     }
   }
   return cardWrap("gold", "マンダラチャート", body);
-}
-function mandalaCellHtml(text, clickable, idx) {
-  if (!text) return '<div class="mandala-cell empty">未設定</div>';
-  var cls = "mandala-cell" + (clickable ? "" : "");
-  var onclick = clickable ? ' onclick="mandalaSelectSub(' + idx + ')"' : "";
-  return '<div class="' + cls + '"' + onclick + '>' + escHtml(text) + '</div>';
 }
 
 function renderStgCard(name) {
