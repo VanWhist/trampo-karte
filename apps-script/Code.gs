@@ -93,6 +93,15 @@ var SEASON_FINAL_LABELS = {
   importantWord: '今年一番大切にしたい言葉',
   message: '最後に、今年の自分へのメッセージ'
 };
+// 競技について（これまでフォームには回答があるのにAPI・画面のどちらにも出ていなかった項目、2026-07-25追加）
+var SEASON_ABOUT_LABELS = {
+  startedWhen: 'トランポリンはいつから始めましたか',
+  reasonStarted: 'トランポリンを始めたきっかけ',
+  favoritePart: 'トランポリンのどんなところが好き',
+  respectedAthlete: '尊敬している選手',
+  strength: 'あなたの強みは何',
+  challenge: '今、一番の課題は何'
+};
 
 function getSheet_(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -252,6 +261,16 @@ function handleSeason_(e) {
   };
   var hasVision = vision.goal || vision.ultimate;
 
+  var about = {
+    startedWhen: pickByPrefix(SEASON_ABOUT_LABELS.startedWhen),
+    reasonStarted: pickByPrefix(SEASON_ABOUT_LABELS.reasonStarted),
+    favoritePart: pickByPrefix(SEASON_ABOUT_LABELS.favoritePart),
+    respectedAthlete: pickByPrefix(SEASON_ABOUT_LABELS.respectedAthlete),
+    strength: pickByPrefix(SEASON_ABOUT_LABELS.strength),
+    challenge: pickByPrefix(SEASON_ABOUT_LABELS.challenge)
+  };
+  var hasAbout = about.startedWhen || about.reasonStarted || about.favoritePart || about.respectedAthlete || about.strength || about.challenge;
+
   var life = {};
   SEASON_LIFE_LABELS.forEach(function (pair) {
     var key = pair[0], prefix = pair[1];
@@ -279,6 +298,7 @@ function handleSeason_(e) {
     topTwo: topTwo,
     competitionPlans: competitionPlans,
     vision: hasVision ? vision : null,
+    about: hasAbout ? about : null,
     life: hasLife ? life : null,
     support: hasSupport ? support : null,
     importantWord: importantWord,

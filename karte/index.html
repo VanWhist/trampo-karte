@@ -385,6 +385,35 @@ function seasonPlaceholder(c) {
   return null;
 }
 
+// 「競技について」カード：これまでフォームに回答があるのに画面に出ていなかった6項目
+// （開始時期・きっかけ・好きなところ・尊敬する選手・強み・今の課題）を表示する（2026-07-25追加）
+function renderAboutCard(name) {
+  var c = seasonCache[name];
+  var placeholder = seasonPlaceholder(c);
+  var body;
+  if (placeholder) body = placeholder;
+  else {
+    var a = c.data.about;
+    if (!a) body = '<div class="mandala-empty">まだ回答がありません</div>';
+    else {
+      var ABOUT_LABELS = [
+        ["startedWhen", "トランポリンを始めた時期"],
+        ["reasonStarted", "始めたきっかけ"],
+        ["favoritePart", "どんなところが好き？"],
+        ["respectedAthlete", "尊敬している選手"],
+        ["strength", "自分の強み"],
+        ["challenge", "今、一番の課題"]
+      ];
+      body = ABOUT_LABELS.map(function (pair) {
+        var key = pair[0], label = pair[1];
+        if (!a[key]) return "";
+        return '<div class="field"><div class="k">' + escHtml(label) + '</div><div class="v">' + escHtml(a[key]) + '</div></div>';
+      }).join("");
+    }
+  }
+  return cardWrap("", "競技について", body);
+}
+
 function renderVisionCard(name) {
   var c = seasonCache[name];
   var placeholder = seasonPlaceholder(c);
@@ -793,6 +822,7 @@ function render() {
     // 本人ページ: 上部に「今、大事にしたいこと」、シーズン目標は目標／自己分析の2枚に分割
     app.innerHTML =
       renderFocusCard(current) +
+      renderAboutCard(current) +
       renderVisionCard(current) +
       renderGoalsCard(current) +
       renderSelfAssessmentCard(current) +
@@ -802,8 +832,11 @@ function render() {
       renderNotesCard(current) +
       renderLifeSupportCard(current);
   } else {
-    // コーチ用一覧: 従来のレイアウトを維持
+    // コーチ用一覧: 従来のレイアウトを維持（今回「競技について」カードのみ追加。
+    // フォームには回答があるのに画面に一切出ていなかった項目のため、コーチ/本人ビュー分岐の
+    // 対象ではなく単純な表示漏れの修正として両ビューに追加）
     app.innerHTML =
+      renderAboutCard(current) +
       renderVisionCard(current) +
       renderSeasonCard(current) +
       renderMandalaCard(current, false) +
