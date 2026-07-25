@@ -22,6 +22,9 @@
     --gold-text: #8a6400;
     --green-soft: #eaf7ef;
     --green-line: #1f9d55;
+    --focus-soft: #fef1e6;
+    --focus-line: #d1720a;
+    --focus-text: #8a4a00;
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -147,6 +150,30 @@
   .chip { background: var(--accent-soft); color: var(--blue-550); font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
   .subhead { font-size: 12px; font-weight: 700; color: var(--text-secondary); margin: 12px 0 4px; }
   .subhead:first-child { margin-top: 0; }
+
+  /* 今、大事にしたいこと（本人ページ限定のフォーカスカード） */
+  .card-head.focus .dot { background: var(--focus-line); }
+  .focus-box { background: var(--focus-soft); border-radius: 10px; padding: 10px 12px; }
+  .focus-box + .focus-box { margin-top: 8px; }
+  .focus-box .k { font-size: 10.5px; color: var(--focus-text); font-weight: 700; margin-bottom: 3px; }
+  .focus-box .v { font-size: 13.5px; line-height: 1.55; color: var(--text-primary); white-space: pre-wrap; }
+
+  /* 本人ページ（player-mode）: 文字を大きめに、生活習慣タイルを2列に */
+  .player-mode .life-grid { grid-template-columns: repeat(2, 1fr); }
+  .player-mode .life-tile .k { font-size: 11px; }
+  .player-mode .life-tile .v { font-size: 13.5px; }
+  .player-mode .card-head h2 { font-size: 14.5px; }
+  .player-mode .field .k { font-size: 12px; }
+  .player-mode .field .v { font-size: 15px; }
+  .player-mode .goal-tile .k { font-size: 11.5px; }
+  .player-mode .goal-tile .v { font-size: 13.5px; }
+  .player-mode .bar-row { grid-template-columns: 108px 1fr; }
+  .player-mode .bar-row .name { font-size: 12.5px; }
+  .player-mode .focus-note { font-size: 12.5px; }
+  .player-mode .mandala-cell.elem .n { font-size: 12px; }
+  .player-mode .mandala-cell.elem .p { font-size: 10.5px; }
+  .player-mode .mandala-cell.action .a { font-size: 11px; }
+  .player-mode .mandala-tap-hint { font-size: 11.5px; color: var(--blue-450); font-weight: 700; text-align: center; margin-bottom: 6px; }
 
   /* airlog list */
   .log-row { padding: 8px 0; border-top: 1px solid var(--gridline); display: flex; justify-content: space-between; gap: 8px; }
@@ -440,6 +467,104 @@ function renderSeasonCard(name) {
   return cardWrap("", "今年のシーズン目標", body);
 }
 
+// 本人ページ（player-mode）用: 「今年のシーズン目標」を目標タイルと自己分析に分割したうちの前半
+function renderGoalsCard(name) {
+  var c = seasonCache[name];
+  var placeholder = seasonPlaceholder(c);
+  var body;
+  if (placeholder) body = placeholder;
+  else {
+    var d = c.data;
+    var GOAL_LABELS = { "成績": "今年達成したい大会成績", "技術": "今年伸ばしたい技術", "フィジカル": "今年伸ばしたい身体能力", "メンタル": "今年強くしたいこと", "学校生活": "学校で頑張りたいこと", "人間性": "競技以外で成長したいこと" };
+    var goals = d.goals || {};
+    var goalsHtml = '<div class="goal-grid">' + Object.keys(GOAL_LABELS).map(function (key) {
+      var v = goals[key];
+      var tile = v ? '<div class="goal-tile">' : '<div class="goal-tile muted">';
+      return tile + '<div class="k">' + escHtml(GOAL_LABELS[key]) + '</div><div class="v">' + escHtml(v || "まだ回答がありません") + '</div></div>';
+    }).join("") + '</div>';
+
+    var cp = d.competitionPlans || {};
+    var cpRows = [
+      ["今シーズン・規定演技", cp.thisSeasonRule],
+      ["今シーズン・自由演技", cp.thisSeasonFree],
+      ["来シーズン・規定演技", cp.nextSeasonRule],
+      ["来シーズン・自由演技", cp.nextSeasonFree]
+    ].filter(function (p) { return p[1]; });
+    var cpHtml = cpRows.length ? '<div class="subhead">大会使用予定の演技</div><div class="goal-grid">' + cpRows.map(function (p) {
+      return '<div class="goal-tile"><div class="k">' + escHtml(p[0]) + '</div><div class="v">' + escHtml(p[1]) + '</div></div>';
+    }).join("") + '</div>' : "";
+
+    body = goalsHtml + cpHtml +
+      (d.timestamp ? '<div class="field" style="margin-top:10px;"><div class="k">記入日</div><div class="v">' + escHtml(fmtDate(d.timestamp)) + '</div></div>' : "");
+  }
+  return cardWrap("", "今年の目標", body);
+}
+
+// 本人ページ（player-mode）用: 「今年のシーズン目標」を目標タイルと自己分析に分割したうちの後半
+function renderSelfAssessmentCard(name) {
+  var c = seasonCache[name];
+  var placeholder = seasonPlaceholder(c);
+  var body;
+  if (placeholder) body = placeholder;
+  else {
+    var d = c.data;
+    var ratings = d.selfRatings || [];
+    var topTwo = d.topTwo || [];
+    if (!ratings.length) body = '<div class="mandala-empty">まだ回答がありません</div>';
+    else {
+      var barsHtml = ratings.map(function (r) {
+        var score = r.score == null ? 0 : r.score;
+        var isFocus = topTwo.indexOf(r.label) >= 0;
+        var color = STEP_COLOR[score] || STEP_COLOR[1];
+        return '<div class="bar-row">' +
+          '<div class="name">' + escHtml(r.label) + (isFocus ? '<span class="focus-chip">★</span>' : '') + '</div>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + (score / 5 * 100) + '%;background:' + color + ';"><span>' + (r.score == null ? "-" : r.score) + '</span></div></div>' +
+          '</div>';
+      }).join("");
+      var focusNote = topTwo.length ? '<div class="focus-note"><span class="focus-chip">★</span> 今年特に伸ばしたい項目: ' + escHtml(topTwo.join("・")) + '</div>' : "";
+      body = '<div class="bars">' + barsHtml + '</div>' + focusNote;
+    }
+  }
+  return cardWrap("", "今の自分（自己分析）", body);
+}
+
+// 本人ページ（player-mode）限定: 画面最上部に出す「今、大事にしたいこと」カード。
+// 新しいフォーム項目を追加せず、既存データ（特に伸ばしたい2項目・直近の短期目標・最新のコーチコメント）
+// から作る。表示するものが何もなければ空文字を返し、カード自体を出さない。
+function renderFocusCard(name) {
+  var items = [];
+
+  var sc = seasonCache[name];
+  if (sc && sc.status === "loaded" && sc.data && sc.data.hasEntry) {
+    var topTwo = sc.data.topTwo || [];
+    if (topTwo.length) items.push({ k: "今年とくに伸ばしたい力", v: topTwo.join("・") });
+  }
+
+  var stc = stgCache[name];
+  if (stc && stc.status === "loaded" && stc.data && stc.data.entry) {
+    var e = stc.data.entry;
+    if (e.wantToTry) items.push({ k: "挑戦したい技", v: e.wantToTry });
+    else if (e.newGoal) items.push({ k: "新しい目標", v: e.newGoal });
+  }
+
+  var ntc = notesCache[name];
+  if (ntc && ntc.status === "loaded" && ntc.data && ntc.data.notes && ntc.data.notes.length) {
+    var notes = ntc.data.notes;
+    var latestCoachNote = null;
+    for (var i = notes.length - 1; i >= 0; i--) {
+      if (notes[i].sender === "コーチ") { latestCoachNote = notes[i]; break; }
+    }
+    if (latestCoachNote) items.push({ k: "コーチから", v: latestCoachNote.text });
+  }
+
+  if (!items.length) return "";
+
+  var body = items.map(function (it) {
+    return '<div class="focus-box"><div class="k">' + escHtml(it.k) + '</div><div class="v">' + escHtml(it.v) + '</div></div>';
+  }).join("");
+  return cardWrap("focus", "今、大事にしたいこと", body);
+}
+
 function renderLifeSupportCard(name) {
   var c = seasonCache[name];
   var placeholder = seasonPlaceholder(c);
@@ -499,7 +624,7 @@ function countDone(actions) {
   return actions ? actions.filter(Boolean).length : 0;
 }
 
-function renderMandalaCard(name) {
+function renderMandalaCard(name, playerMode) {
   var c = mandalaCache[name];
   var body;
   if (!c || c.status === "loading") body = '<div class="mandala-empty">読み込み中…</div>';
@@ -518,13 +643,16 @@ function renderMandalaCard(name) {
         if (drillEl) {
           var actions = drillEl.actions || [];
           var cells9 = [actions[0], actions[1], actions[2], actions[3], "__CENTER__", actions[4], actions[5], actions[6], actions[7]];
+          var emptyLabel = playerMode ? "これから考える" : "未記入";
           var cellsHtml = cells9.map(function (v) {
             if (v === "__CENTER__") return '<div class="mandala-cell center sub"><div class="g">' + escHtml(drillEl.name) + '</div></div>';
             if (v) return '<div class="mandala-cell action filled"><div class="a">' + escHtml(v) + '</div></div>';
-            return '<div class="mandala-cell action"><div class="a muted">（未記入）</div></div>';
+            return '<div class="mandala-cell action"><div class="a muted">（' + emptyLabel + '）</div></div>';
           }).join("");
+          var drillCount = countDone(drillEl.actions);
+          var drillLabel = playerMode ? (drillCount + '個できた') : (drillCount + '/8 記入済み');
           body = '<div class="mandala-summary" style="margin-top:0;margin-bottom:8px;">' +
-            '<a class="mandala-link" href="javascript:void(0)" onclick="mandalaBack()">← 全体に戻る</a><span>' + countDone(drillEl.actions) + '/8 記入済み</span></div>' +
+            '<a class="mandala-link" href="javascript:void(0)" onclick="mandalaBack()">← 全体に戻る</a><span>' + drillLabel + '</span></div>' +
             '<div class="mandala-3x3">' + cellsHtml + '</div>' +
             '<div class="mandala-summary"><span></span>' + (d.editUrl ? '<a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">シートで編集する →</a>' : '') + '</div>';
         } else {
@@ -534,15 +662,18 @@ function renderMandalaCard(name) {
             var done = countDone(el.actions);
             doneTotal += done; cellTotal += 8;
             var started = done > 0;
+            var pLabel = playerMode ? (started ? done + "個できた" : "これから考える") : (done + '/8' + (started ? '' : '・未着手'));
             return '<div class="mandala-cell elem clickable' + (started ? ' started' : '') + '" onclick="selectMandalaElement(\'' + escHtml(el.name).replace(/'/g, "\\'") + '\')">' +
-              '<div class="n">' + escHtml(el.name) + '</div><div class="p">' + done + '/8' + (started ? '' : '・未着手') + '</div></div>';
+              '<div class="n">' + escHtml(el.name) + '</div><div class="p">' + pLabel + '</div></div>';
           });
           // 要素の並びは中心マスの位置(4番目)に中心目標を差し込む
           cellsHtml2.splice(4, 0, '<div class="mandala-cell center"><div class="g">' + escHtml(m.goal) + '</div></div>');
-          body = '<div class="mandala-3x3">' + cellsHtml2.join("") + '</div>' +
+          var tapHint = playerMode ? '<div class="mandala-tap-hint">👉 8つのマスをタップすると、それぞれの行動を見られるよ</div>' : "";
+          var bottomHint = playerMode ? "" : '<div style="font-size:10.5px;color:var(--text-muted);margin-top:4px;text-align:center;">各要素をタップすると、その8マスの内容を見られます</div>';
+          body = tapHint + '<div class="mandala-3x3">' + cellsHtml2.join("") + '</div>' +
             '<div class="mandala-summary"><span>行動レベル ' + doneTotal + '/' + cellTotal + 'マス記入済み' + (d.updatedAt ? '・更新日 ' + escHtml(fmtDate(d.updatedAt)) : '') + '</span>' +
             (d.editUrl ? '<a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">全81マスを見る →</a>' : '') + '</div>' +
-            '<div style="font-size:10.5px;color:var(--text-muted);margin-top:4px;text-align:center;">各要素をタップすると、その8マスの内容を見られます</div>';
+            bottomHint;
         }
       }
     }
@@ -658,14 +789,29 @@ function render() {
     updatedRow.textContent = "中長期目標 更新日: " + (seasonUpdated || "まだ回答がありません");
   }
 
-  app.innerHTML =
-    renderVisionCard(current) +
-    renderSeasonCard(current) +
-    renderMandalaCard(current) +
-    renderStgCard(current) +
-    renderAirlogCard(current) +
-    renderNotesCard(current) +
-    renderLifeSupportCard(current);
+  if (VIEW_MODE === "player") {
+    // 本人ページ: 上部に「今、大事にしたいこと」、シーズン目標は目標／自己分析の2枚に分割
+    app.innerHTML =
+      renderFocusCard(current) +
+      renderVisionCard(current) +
+      renderGoalsCard(current) +
+      renderSelfAssessmentCard(current) +
+      renderMandalaCard(current, true) +
+      renderStgCard(current) +
+      renderAirlogCard(current) +
+      renderNotesCard(current) +
+      renderLifeSupportCard(current);
+  } else {
+    // コーチ用一覧: 従来のレイアウトを維持
+    app.innerHTML =
+      renderVisionCard(current) +
+      renderSeasonCard(current) +
+      renderMandalaCard(current, false) +
+      renderStgCard(current) +
+      renderAirlogCard(current) +
+      renderNotesCard(current) +
+      renderLifeSupportCard(current);
+  }
 }
 
 /* ---------------- 起動 ---------------- */
@@ -679,6 +825,7 @@ async function initApp() {
       var res = await apiGet("resolver", urlToken);
       if (res.error) { renderFatal("このリンクは無効です。お手数ですが保護者にご確認ください。"); return; }
       VIEW_MODE = "player";
+      document.body.classList.add("player-mode");
       ATHLETES = [{ name: res.name, token: urlToken }];
       current = res.name;
       document.querySelector(".app-title").textContent = res.name + " の選手カルテ";
