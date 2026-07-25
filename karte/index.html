@@ -48,6 +48,7 @@
     font-weight: 600; color: var(--text-secondary); border-radius: 8px; font-family: inherit;
   }
   .segmented button.active { background: var(--surface-1); color: var(--text-primary); box-shadow: 0 1px 3px rgba(11,11,11,0.12); }
+  .updated-row { display: flex; justify-content: center; margin-top: 8px; font-size: 11.5px; color: var(--text-muted); }
   .app-body { padding: 12px 12px calc(var(--safe-bottom) + 28px); max-width: 480px; margin: 0 auto; }
   .card { background: var(--surface-1); border-radius: 14px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(11,11,11,0.05); border: 1px solid var(--border); }
   .card-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 8px; }
@@ -60,7 +61,39 @@
   .field:first-child { border-top: none; padding-top: 0; }
   .field .k { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
   .field .v { font-size: 14px; line-height: 1.55; color: var(--text-primary); white-space: pre-wrap; }
+  .field.clickable { cursor: pointer; transition: opacity 0.08s ease; }
+  .field.clickable:active { opacity: 0.6; }
+  .field .chev { font-size: 17px; color: var(--blue-450); font-weight: 700; opacity: 0.7; vertical-align: -2px; }
+  .field.sub { background: var(--gold-soft); border-top: none; border-radius: 8px; padding: 9px 10px; margin: 2px 0 4px; }
+  .field.sub .k { color: var(--gold-text); }
   .muted { color: var(--text-muted); font-size: 13px; }
+
+  /* goal tiles (2列グリッド、MIC方式) */
+  .goal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .goal-tile { background: var(--accent-soft); border-radius: 10px; padding: 9px 10px; }
+  .goal-tile .k { font-size: 10.5px; color: var(--blue-450); font-weight: 700; margin-bottom: 3px; }
+  .goal-tile .v { font-size: 12.5px; line-height: 1.5; color: var(--text-primary); }
+  .goal-tile.muted { background: var(--page); opacity: 0.7; }
+
+  /* 自己分析: 横棒グラフ */
+  .bars { display: flex; flex-direction: column; gap: 8px; }
+  .bar-row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; }
+  .bar-row .name { font-size: 11px; color: var(--text-secondary); text-align: right; white-space: nowrap; }
+  .bar-track { position: relative; height: 16px; background: var(--page); border-radius: 4px; }
+  .bar-fill { position: absolute; left: 0; top: 0; height: 16px; border-radius: 4px; display: flex; align-items: center; }
+  .bar-fill span { color: #fff; font-size: 10px; font-weight: 700; margin-left: auto; margin-right: 5px; }
+  .focus-chip { display: inline-block; font-size: 9.5px; background: var(--gold-soft); color: var(--gold-text); border: 1px solid var(--gold-line); border-radius: 999px; padding: 1px 6px; margin-left: 4px; }
+  .focus-note { font-size: 11px; color: var(--text-muted); margin-top: 10px; }
+
+  /* 生活習慣: 4列タイル */
+  .life-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .life-tile { background: var(--page); border-radius: 10px; padding: 8px 4px; text-align: center; }
+  .life-tile .k { font-size: 9.5px; color: var(--text-muted); margin-bottom: 3px; }
+  .life-tile .v { font-size: 12px; font-weight: 700; }
+
+  /* 最後にメッセージ */
+  .message-box { background: var(--gold-soft); border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.6; margin-top: 10px; }
+  .message-box .k { font-size: 10.5px; color: var(--gold-text); font-weight: 700; margin-bottom: 4px; }
   .btn { display: inline-block; border: none; border-radius: 10px; padding: 9px 14px; font-size: 13.5px; font-weight: 700; font-family: inherit; cursor: pointer; }
   .btn-primary { background: var(--blue-450); color: #fff; }
   .btn-ghost { background: var(--page); color: var(--text-secondary); }
@@ -84,6 +117,28 @@
   .mandala-cell9.block-center { background: var(--accent-soft); font-weight: 700; color: var(--blue-550); }
   .mandala-cell9.empty { color: var(--text-muted); }
   .mandala-link { font-size: 12.5px; color: var(--blue-450); font-weight: 700; margin-top: 10px; display: inline-block; }
+  .mandala-summary { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px; color: var(--text-muted); }
+  .mandala-empty { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; padding: 4px 2px 10px; }
+
+  /* マンダラ: タップして展開する3x3(MIC方式) */
+  .mandala-3x3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .mandala-cell { border-radius: 10px; padding: 8px 4px; text-align: center; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .mandala-cell.center { background: var(--gold-soft); border: 1px solid var(--gold-line); }
+  .mandala-cell.center .g { font-size: 10.5px; font-weight: 700; color: var(--gold-text); line-height: 1.4; }
+  .mandala-cell.center.sub { background: var(--accent-soft); border: 1px solid var(--blue-250); }
+  .mandala-cell.center.sub .g { color: var(--blue-550); }
+  .mandala-cell.elem { background: var(--page); opacity: 0.7; }
+  .mandala-cell.elem.started { background: var(--accent-soft); border: 1px solid var(--blue-250); opacity: 1; }
+  .mandala-cell.elem .n { font-size: 11px; font-weight: 700; color: var(--blue-550); margin-bottom: 2px; line-height: 1.3; }
+  .mandala-cell.elem .p { font-size: 9px; color: var(--text-muted); }
+  .mandala-cell.elem.started .p { color: var(--blue-450); font-weight: 700; }
+  .mandala-cell.clickable { cursor: pointer; transition: transform 0.08s ease; position: relative; }
+  .mandala-cell.clickable:active { transform: scale(0.95); }
+  .mandala-cell.elem.clickable::after { content: "\203A"; position: absolute; top: 0px; right: 3px; font-size: 16px; font-weight: 700; color: var(--blue-450); opacity: 0.6; }
+  .mandala-cell.action { background: var(--page); padding: 6px 4px; }
+  .mandala-cell.action.filled { background: var(--surface-1); border: 1px solid var(--gridline); }
+  .mandala-cell.action .a { font-size: 9.5px; line-height: 1.35; color: var(--text-primary); }
+  .mandala-cell.action .a.muted { color: var(--text-muted); font-style: italic; }
   .rating-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-top: 1px solid var(--gridline); font-size: 13px; }
   .rating-row:first-child { border-top: none; }
   .rating-row .rn { color: var(--text-secondary); }
@@ -114,6 +169,7 @@
 <div class="app-header">
   <p class="app-title">選手カルテ</p>
   <div class="segmented" id="selector" style="display:none;"></div>
+  <div class="updated-row" id="updatedRow"></div>
 </div>
 <div class="app-body" id="app"></div>
 
@@ -146,6 +202,9 @@ var airlogFormOpen = {};  // name -> bool
 var airlogDraft = {};     // name -> {group, skill, custom, reps, success, memo, videoUrl}
 var noteDraft = {};       // name -> テキスト
 var fatalMessage = null;
+
+var mandalaDrill = null;                    // 現在ドリルダウン中の要素名（nullなら全体表示）
+var visionExpanded = { goal: false, ultimate: false }; // 将来ビジョンの各項目が開いているか
 
 function apiGet(type, token) {
   var url = API_URL + "?type=" + encodeURIComponent(type) + (token ? "&token=" + encodeURIComponent(token) : "");
@@ -220,8 +279,23 @@ function loadAllFor(name) {
 
 window.selectAthlete = function (name) {
   current = name;
+  mandalaDrill = null;
+  visionExpanded = { goal: false, ultimate: false };
   render();
   loadAllFor(name);
+};
+
+window.toggleVision = function (key) {
+  visionExpanded[key] = !visionExpanded[key];
+  render();
+};
+window.selectMandalaElement = function (name) {
+  mandalaDrill = name;
+  render();
+};
+window.mandalaBack = function () {
+  mandalaDrill = null;
+  render();
 };
 
 window.toggleAirlogForm = function () {
@@ -273,75 +347,204 @@ function cardWrap(tone, title, bodyHtml) {
   return '<div class="card"><div class="card-head ' + tone + '"><span class="dot"></span><h2>' + escHtml(title) + '</h2></div><div class="card-body">' + bodyHtml + '</div></div>';
 }
 
-function renderSeasonCard(name) {
+// スコアに応じたバーの色（MICと同じ5段階配色）
+var STEP_COLOR = { 1: "#86b6ef", 2: "#5598e7", 3: "#2a78d6", 4: "#1c5cab", 5: "#104281" };
+
+function seasonPlaceholder(c) {
+  if (!c || c.status === "loading") return '<div class="mandala-empty">読み込み中…</div>';
+  if (c.status === "error") return '<div class="mandala-empty">読み込みに失敗しました</div>';
+  if (c.data && c.data.error) return '<div class="mandala-empty">' + escHtml(c.data.error) + '</div>';
+  if (!c.data || !c.data.hasEntry) return '<div class="mandala-empty">まだシーズン目標が登録されていません</div>';
+  return null;
+}
+
+function renderVisionCard(name) {
   var c = seasonCache[name];
+  var placeholder = seasonPlaceholder(c);
   var body;
-  if (!c || c.status === "loading") body = '<div class="loading-line">読み込み中…</div>';
-  else if (c.status === "error") body = '<div class="muted">読み込みに失敗しました</div>';
+  if (placeholder) body = placeholder;
   else {
-    var d = c.data;
-    if (d.error) body = '<div class="muted">' + escHtml(d.error) + '</div>';
-    else if (!d.hasEntry) body = '<div class="muted">まだシーズン目標が登録されていません</div>';
+    var v = c.data.vision;
+    if (!v) body = '<div class="mandala-empty">まだ回答がありません</div>';
     else {
-      var GOAL_LABELS = { "成績": "今年達成したい大会成績", "技術": "今年伸ばしたい技術", "フィジカル": "今年伸ばしたい身体能力", "メンタル": "今年強くしたいこと", "学校生活": "学校で頑張りたいこと", "人間性": "競技以外で成長したいこと" };
-      var goals = d.goals || {};
-      var goalsHtml = Object.keys(GOAL_LABELS).map(function (key) {
-        var v = goals[key];
-        if (!v) return "";
-        return '<div class="field"><div class="k">' + escHtml(GOAL_LABELS[key]) + '（' + escHtml(key) + '）</div><div class="v">' + escHtml(v) + '</div></div>';
-      }).join("");
-
-      var ratings = d.selfRatings || [];
-      var ratingsHtml = ratings.length ? '<div class="subhead">自己分析（5段階評価）</div>' + ratings.map(function (r) {
-        return '<div class="rating-row"><span class="rn">' + escHtml(r.label) + '</span><span class="rv">' + (r.score == null ? "-" : r.score) + ' / 5</span></div>';
-      }).join("") : "";
-
-      var topTwoHtml = (d.topTwo && d.topTwo.length) ? '<div class="subhead">特に伸ばしたい項目</div><div class="chip-row">' + d.topTwo.map(function (t) { return '<span class="chip">' + escHtml(t) + '</span>'; }).join("") + '</div>' : "";
-
-      var cp = d.competitionPlans || {};
-      var cpRows = [
-        ["今シーズン・規定演技", cp.thisSeasonRule],
-        ["今シーズン・自由演技", cp.thisSeasonFree],
-        ["来シーズン・規定演技", cp.nextSeasonRule],
-        ["来シーズン・自由演技", cp.nextSeasonFree]
-      ].filter(function (p) { return p[1]; });
-      var cpHtml = cpRows.length ? '<div class="subhead">大会使用予定の演技</div>' + cpRows.map(function (p) {
-        return '<div class="field"><div class="k">' + escHtml(p[0]) + '</div><div class="v">' + escHtml(p[1]) + '</div></div>';
-      }).join("") : "";
-
-      body = goalsHtml + ratingsHtml + topTwoHtml + cpHtml +
-        (d.timestamp ? '<div class="field" style="margin-top:10px;"><div class="k">記入日</div><div class="v">' + escHtml(fmtDate(d.timestamp)) + '</div></div>' : "");
+      var goalOpen = visionExpanded.goal;
+      var html = '<div class="field clickable" onclick="toggleVision(\'goal\')">' +
+        '<div class="k">3〜5年後の目標 <span class="chev">' + (goalOpen ? "▾" : "▸") + '</span></div>' +
+        '<div class="v">' + escHtml(v.goal || "（回答なし）") + '</div></div>';
+      if (goalOpen) {
+        html += '<div class="field sub"><div class="k">その理由</div><div class="v">' + escHtml(v.reason || "（回答なし）") + '</div></div>';
+      }
+      var ultOpen = visionExpanded.ultimate;
+      html += '<div class="field clickable" onclick="toggleVision(\'ultimate\')">' +
+        '<div class="k">競技を長く続けた先の到達点 <span class="chev">' + (ultOpen ? "▾" : "▸") + '</span></div>' +
+        '<div class="v">' + escHtml(v.ultimate || "（回答なし）") + '</div></div>';
+      if (ultOpen) {
+        html += '<div class="field sub">' +
+          '<div class="k">達成のために必要なこと</div><div class="v">' + escHtml(v.needed || "（回答なし）") + '</div>' +
+          '<div class="k" style="margin-top:8px;">達成できたとき、自分はどんな気持ちか</div><div class="v">' + escHtml(v.selfFeeling || "（回答なし）") + '</div>' +
+          '<div class="k" style="margin-top:8px;">達成したら、家族や友達はどう思うか</div><div class="v">' + escHtml(v.othersFeeling || "（回答なし）") + '</div>' +
+          '</div>';
+      }
+      body = html;
     }
   }
-  return cardWrap("", "シーズン目標", body);
+  return cardWrap("gold", "将来の目標", body);
+}
+
+function renderSeasonCard(name) {
+  var c = seasonCache[name];
+  var placeholder = seasonPlaceholder(c);
+  var body;
+  if (placeholder) body = placeholder;
+  else {
+    var d = c.data;
+    var GOAL_LABELS = { "成績": "今年達成したい大会成績", "技術": "今年伸ばしたい技術", "フィジカル": "今年伸ばしたい身体能力", "メンタル": "今年強くしたいこと", "学校生活": "学校で頑張りたいこと", "人間性": "競技以外で成長したいこと" };
+    var goals = d.goals || {};
+    var goalsHtml = '<div class="goal-grid">' + Object.keys(GOAL_LABELS).map(function (key) {
+      var v = goals[key];
+      var tile = v ? '<div class="goal-tile">' : '<div class="goal-tile muted">';
+      return tile + '<div class="k">' + escHtml(GOAL_LABELS[key]) + '</div><div class="v">' + escHtml(v || "まだ回答がありません") + '</div></div>';
+    }).join("") + '</div>';
+
+    var ratings = d.selfRatings || [];
+    var topTwo = d.topTwo || [];
+    var ratingsHtml = "";
+    if (ratings.length) {
+      var barsHtml = ratings.map(function (r) {
+        var score = r.score == null ? 0 : r.score;
+        var isFocus = topTwo.indexOf(r.label) >= 0;
+        var color = STEP_COLOR[score] || STEP_COLOR[1];
+        return '<div class="bar-row">' +
+          '<div class="name">' + escHtml(r.label) + (isFocus ? '<span class="focus-chip">★</span>' : '') + '</div>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + (score / 5 * 100) + '%;background:' + color + ';"><span>' + (r.score == null ? "-" : r.score) + '</span></div></div>' +
+          '</div>';
+      }).join("");
+      var focusNote = topTwo.length ? '<div class="focus-note"><span class="focus-chip">★</span> 今年特に伸ばしたい項目: ' + escHtml(topTwo.join("・")) + '</div>' : "";
+      ratingsHtml = '<div class="subhead">自己分析（5段階評価）</div><div class="bars">' + barsHtml + '</div>' + focusNote;
+    }
+
+    var cp = d.competitionPlans || {};
+    var cpRows = [
+      ["今シーズン・規定演技", cp.thisSeasonRule],
+      ["今シーズン・自由演技", cp.thisSeasonFree],
+      ["来シーズン・規定演技", cp.nextSeasonRule],
+      ["来シーズン・自由演技", cp.nextSeasonFree]
+    ].filter(function (p) { return p[1]; });
+    var cpHtml = cpRows.length ? '<div class="subhead">大会使用予定の演技</div><div class="goal-grid">' + cpRows.map(function (p) {
+      return '<div class="goal-tile"><div class="k">' + escHtml(p[0]) + '</div><div class="v">' + escHtml(p[1]) + '</div></div>';
+    }).join("") + '</div>' : "";
+
+    body = goalsHtml + ratingsHtml + cpHtml +
+      (d.timestamp ? '<div class="field" style="margin-top:10px;"><div class="k">記入日</div><div class="v">' + escHtml(fmtDate(d.timestamp)) + '</div></div>' : "");
+  }
+  return cardWrap("", "今年のシーズン目標", body);
+}
+
+function renderLifeSupportCard(name) {
+  var c = seasonCache[name];
+  var placeholder = seasonPlaceholder(c);
+  var body;
+  if (placeholder) body = placeholder;
+  else {
+    var d = c.data;
+    var life = d.life, support = d.support;
+    if (!life && !support && !d.finalMessage) body = '<div class="mandala-empty">まだ回答がありません</div>';
+    else {
+      var html = "";
+      if (life) {
+        html += '<div class="life-grid">' + Object.keys(life).map(function (k) {
+          return '<div class="life-tile"><div class="k">' + escHtml(k) + '</div><div class="v">' + escHtml(life[k]) + '</div></div>';
+        }).join("") + '</div>';
+      }
+      if (support) {
+        var SUPPORT_LABELS = { coachRequest: "コーチに教えてほしいこと", worry: "今、不安なこと", toParents: "保護者やコーチに伝えたいこと" };
+        Object.keys(SUPPORT_LABELS).forEach(function (k) {
+          if (support[k]) html += '<div class="field"><div class="k">' + escHtml(SUPPORT_LABELS[k]) + '</div><div class="v">' + escHtml(support[k]) + '</div></div>';
+        });
+      }
+      if (d.importantWord || d.finalMessage) {
+        html += '<div class="message-box">' +
+          (d.importantWord ? '<div class="k">今年一番大切にしたい言葉</div>' + escHtml(d.importantWord) : '') +
+          (d.finalMessage ? '<div class="k" style="margin-top:8px;">自分へのメッセージ</div>' + escHtml(d.finalMessage) : '') +
+          '</div>';
+      }
+      body = html;
+    }
+  }
+  return cardWrap("green", "生活習慣・サポート", body);
+}
+
+// 9x9の生シート(MICのマンダラチャート(記入用)と同じレイアウト)を、中心目標+8要素(各8アクション)の
+// 構造にクライアント側でパースする。中心ブロック(行3-5・列3-5)の中心=中心目標、その周囲8マスが
+// 8要素の名前。各要素名は、その要素に対応するブロック(周囲8ブロックのいずれか)の中心マスにも
+// 同じ文言で入っている想定(MIC標準のマンダラート様式)ので、そのブロックの残り8マスを行動リストとする。
+function parseMandala9x9(grid) {
+  if (!grid) return null;
+  var centerGoal = grid[4][4];
+  if (!centerGoal) return null;
+  var rel = [[0, 0], [0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1], [2, 2]];
+  var elements = rel.map(function (p) {
+    var name = grid[3 + p[0]][3 + p[1]];
+    if (!name) return null;
+    var actions = rel.map(function (p2) {
+      var v = grid[p[0] * 3 + p2[0]][p[1] * 3 + p2[1]];
+      return v || null;
+    });
+    return { name: name, actions: actions };
+  });
+  return { goal: centerGoal, elements: elements };
+}
+
+function countDone(actions) {
+  return actions ? actions.filter(Boolean).length : 0;
 }
 
 function renderMandalaCard(name) {
   var c = mandalaCache[name];
   var body;
-  if (!c || c.status === "loading") body = '<div class="loading-line">読み込み中…</div>';
-  else if (c.status === "error") body = '<div class="muted">読み込みに失敗しました</div>';
+  if (!c || c.status === "loading") body = '<div class="mandala-empty">読み込み中…</div>';
+  else if (c.status === "error") body = '<div class="mandala-empty">読み込みに失敗しました</div>';
   else {
     var d = c.data;
-    if (d.error) body = '<div class="muted">' + escHtml(d.error) + '</div>';
-    else if (!d.grid) {
-      body = '<div class="muted">まだマンダラチャートが作成されていません</div>' +
-        (d.editUrl ? '<a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">＋ マンダラシートを開いて記入する</a>' : "");
-    } else {
-      var grid = d.grid;
-      var cells = "";
-      for (var r = 0; r < 9; r++) {
-        for (var col = 0; col < 9; col++) {
-          var text = grid[r][col];
-          var isCenter = (r === 4 && col === 4);
-          var isBlockCenter = !isCenter && (r % 3 === 1) && (col % 3 === 1);
-          var cls = "mandala-cell9" + (isCenter ? " center-goal" : isBlockCenter ? " block-center" : "") + (!text ? " empty" : "");
-          cells += '<div class="' + cls + '">' + escHtml(text || "") + '</div>';
+    if (d.error) body = '<div class="mandala-empty">' + escHtml(d.error) + '</div>' +
+      (d.editUrl ? '<div class="mandala-summary"><span></span><a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">シートを開く →</a></div>' : "");
+    else {
+      var m = parseMandala9x9(d.grid);
+      if (!m) {
+        body = '<div class="mandala-empty">まだ着手前です。「マンダラチャート(記入用)」シートの中心マス(目標)から書き始めてもらいましょう。</div>' +
+          (d.editUrl ? '<div class="mandala-summary"><span></span><a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">シートを開く →</a></div>' : "");
+      } else {
+        var drillEl = mandalaDrill ? m.elements.filter(function (el) { return el && el.name === mandalaDrill; })[0] : null;
+        if (drillEl) {
+          var actions = drillEl.actions || [];
+          var cells9 = [actions[0], actions[1], actions[2], actions[3], "__CENTER__", actions[4], actions[5], actions[6], actions[7]];
+          var cellsHtml = cells9.map(function (v) {
+            if (v === "__CENTER__") return '<div class="mandala-cell center sub"><div class="g">' + escHtml(drillEl.name) + '</div></div>';
+            if (v) return '<div class="mandala-cell action filled"><div class="a">' + escHtml(v) + '</div></div>';
+            return '<div class="mandala-cell action"><div class="a muted">（未記入）</div></div>';
+          }).join("");
+          body = '<div class="mandala-summary" style="margin-top:0;margin-bottom:8px;">' +
+            '<a class="mandala-link" href="javascript:void(0)" onclick="mandalaBack()">← 全体に戻る</a><span>' + countDone(drillEl.actions) + '/8 記入済み</span></div>' +
+            '<div class="mandala-3x3">' + cellsHtml + '</div>' +
+            '<div class="mandala-summary"><span></span>' + (d.editUrl ? '<a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">シートで編集する →</a>' : '') + '</div>';
+        } else {
+          var doneTotal = 0, cellTotal = 0;
+          var cellsHtml2 = m.elements.map(function (el) {
+            if (!el) return '<div class="mandala-cell center"><div class="g">' + escHtml(m.goal) + '</div></div>';
+            var done = countDone(el.actions);
+            doneTotal += done; cellTotal += 8;
+            var started = done > 0;
+            return '<div class="mandala-cell elem clickable' + (started ? ' started' : '') + '" onclick="selectMandalaElement(\'' + escHtml(el.name).replace(/'/g, "\\'") + '\')">' +
+              '<div class="n">' + escHtml(el.name) + '</div><div class="p">' + done + '/8' + (started ? '' : '・未着手') + '</div></div>';
+          });
+          // 要素の並びは中心マスの位置(4番目)に中心目標を差し込む
+          cellsHtml2.splice(4, 0, '<div class="mandala-cell center"><div class="g">' + escHtml(m.goal) + '</div></div>');
+          body = '<div class="mandala-3x3">' + cellsHtml2.join("") + '</div>' +
+            '<div class="mandala-summary"><span>行動レベル ' + doneTotal + '/' + cellTotal + 'マス記入済み' + (d.updatedAt ? '・更新日 ' + escHtml(fmtDate(d.updatedAt)) : '') + '</span>' +
+            (d.editUrl ? '<a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">全81マスを見る →</a>' : '') + '</div>' +
+            '<div style="font-size:10.5px;color:var(--text-muted);margin-top:4px;text-align:center;">各要素をタップすると、その8マスの内容を見られます</div>';
         }
       }
-      body = '<div class="mandala-grid9">' + cells + '</div>' +
-        (d.updatedAt ? '<div class="field" style="margin-top:10px;"><div class="k">更新日</div><div class="v">' + escHtml(fmtDate(d.updatedAt)) + '</div></div>' : "") +
-        (d.editUrl ? '<a class="mandala-link" href="' + escHtml(d.editUrl) + '" target="_blank" rel="noopener">シートを開いて編集する</a>' : "");
     }
   }
   return cardWrap("gold", "マンダラチャート", body);
@@ -446,12 +649,23 @@ function render() {
   var app = document.getElementById("app");
   if (fatalMessage) { app.innerHTML = '<div class="fatal">' + escHtml(fatalMessage) + '</div>'; return; }
   if (!current) { app.innerHTML = '<div class="loading-line">読み込み中…</div>'; return; }
+
+  var updatedRow = document.getElementById("updatedRow");
+  if (updatedRow) {
+    loadSeason(current); // 既に読み込み中/済みなら何もしない
+    var sc = seasonCache[current];
+    var seasonUpdated = (sc && sc.status === "loaded" && sc.data.hasEntry) ? fmtDate(sc.data.timestamp) : null;
+    updatedRow.textContent = "中長期目標 更新日: " + (seasonUpdated || "まだ回答がありません");
+  }
+
   app.innerHTML =
+    renderVisionCard(current) +
     renderSeasonCard(current) +
     renderMandalaCard(current) +
     renderStgCard(current) +
     renderAirlogCard(current) +
-    renderNotesCard(current);
+    renderNotesCard(current) +
+    renderLifeSupportCard(current);
 }
 
 /* ---------------- 起動 ---------------- */

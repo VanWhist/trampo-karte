@@ -66,6 +66,33 @@ var SEASON_GOAL_LABELS = [
   ['学校生活', '学校で頑張りたいこと'],
   ['人間性', '競技以外で成長したいこと']
 ];
+// 将来の目標（MICの「将来ビジョン」カードに相当）
+var SEASON_VISION_LABELS = {
+  goal: '3〜5年後',
+  reason: 'その理由を教えて',
+  ultimate: '競技を長く続けた先の',
+  needed: 'その目標を達成するために必要な',
+  selfFeeling: 'その目標を達成できたとき',
+  othersFeeling: 'その目標を達成することで'
+};
+// 生活習慣（4項目）
+var SEASON_LIFE_LABELS = [
+  ['平均睡眠時間', '平均睡眠時間'],
+  ['朝食', '朝食'],
+  ['自主トレ', '自主トレ'],
+  ['スマホ・ゲーム', 'スマホ・ゲーム']
+];
+// サポートについて
+var SEASON_SUPPORT_LABELS = {
+  coachRequest: 'コーチに教えてほしい',
+  worry: '今、不安な',
+  toParents: '保護者やコーチに伝えたい'
+};
+// 最後に（大切にしたい言葉・自分へのメッセージ）
+var SEASON_FINAL_LABELS = {
+  importantWord: '今年一番大切にしたい言葉',
+  message: '最後に、今年の自分へのメッセージ'
+};
 
 function getSheet_(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -215,6 +242,34 @@ function handleSeason_(e) {
     nextSeasonFree: pickByPrefix('来シーズン大会で使う予定の演技(自由演技)')
   };
 
+  var vision = {
+    goal: pickByPrefix(SEASON_VISION_LABELS.goal),
+    reason: pickByPrefix(SEASON_VISION_LABELS.reason),
+    ultimate: pickByPrefix(SEASON_VISION_LABELS.ultimate),
+    needed: pickByPrefix(SEASON_VISION_LABELS.needed),
+    selfFeeling: pickByPrefix(SEASON_VISION_LABELS.selfFeeling),
+    othersFeeling: pickByPrefix(SEASON_VISION_LABELS.othersFeeling)
+  };
+  var hasVision = vision.goal || vision.ultimate;
+
+  var life = {};
+  SEASON_LIFE_LABELS.forEach(function (pair) {
+    var key = pair[0], prefix = pair[1];
+    var v = pickByPrefix(prefix);
+    if (v) life[key] = v;
+  });
+  var hasLife = Object.keys(life).length > 0;
+
+  var support = {
+    coachRequest: pickByPrefix(SEASON_SUPPORT_LABELS.coachRequest),
+    worry: pickByPrefix(SEASON_SUPPORT_LABELS.worry),
+    toParents: pickByPrefix(SEASON_SUPPORT_LABELS.toParents)
+  };
+  var hasSupport = support.coachRequest || support.worry || support.toParents;
+
+  var importantWord = pickByPrefix(SEASON_FINAL_LABELS.importantWord);
+  var finalMessage = pickByPrefix(SEASON_FINAL_LABELS.message);
+
   return {
     name: name,
     hasEntry: true,
@@ -222,7 +277,12 @@ function handleSeason_(e) {
     goals: goals,
     selfRatings: selfRatings,
     topTwo: topTwo,
-    competitionPlans: competitionPlans
+    competitionPlans: competitionPlans,
+    vision: hasVision ? vision : null,
+    life: hasLife ? life : null,
+    support: hasSupport ? support : null,
+    importantWord: importantWord,
+    finalMessage: finalMessage
   };
 }
 
