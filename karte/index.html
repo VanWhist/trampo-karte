@@ -232,6 +232,7 @@ var fatalMessage = null;
 
 var mandalaDrill = null;                    // 現在ドリルダウン中の要素名（nullなら全体表示）
 var visionExpanded = { goal: false, ultimate: false }; // 将来ビジョンの各項目が開いているか
+var aboutExpanded = {}; // 「競技について」の各項目が開いているか（key -> bool）
 
 function apiGet(type, token) {
   var url = API_URL + "?type=" + encodeURIComponent(type) + (token ? "&token=" + encodeURIComponent(token) : "");
@@ -308,12 +309,17 @@ window.selectAthlete = function (name) {
   current = name;
   mandalaDrill = null;
   visionExpanded = { goal: false, ultimate: false };
+  aboutExpanded = {};
   render();
   loadAllFor(name);
 };
 
 window.toggleVision = function (key) {
   visionExpanded[key] = !visionExpanded[key];
+  render();
+};
+window.toggleAbout = function (key) {
+  aboutExpanded[key] = !aboutExpanded[key];
   render();
 };
 window.selectMandalaElement = function (name) {
@@ -407,7 +413,12 @@ function renderAboutCard(name) {
       body = ABOUT_LABELS.map(function (pair) {
         var key = pair[0], label = pair[1];
         if (!a[key]) return "";
-        return '<div class="field"><div class="k">' + escHtml(label) + '</div><div class="v">' + escHtml(a[key]) + '</div></div>';
+        var open = !!aboutExpanded[key];
+        var html = '<div class="field clickable" onclick="toggleAbout(\'' + key + '\')">' +
+          '<div class="k">' + escHtml(label) + ' <span class="chev">' + (open ? "▾" : "▸") + '</span></div>';
+        if (open) html += '<div class="v">' + escHtml(a[key]) + '</div>';
+        html += '</div>';
+        return html;
       }).join("");
     }
   }
