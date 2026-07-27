@@ -69,6 +69,7 @@
   .field.clickable { cursor: pointer; transition: opacity 0.08s ease; }
   .field.clickable:active { opacity: 0.6; }
   .field .chev { font-size: 17px; color: var(--blue-450); font-weight: 700; opacity: 0.7; vertical-align: -2px; }
+  .card-head .chev { font-size: 15px; color: var(--blue-450); font-weight: 700; opacity: 0.7; flex: none; }
   .field.sub { background: var(--gold-soft); border-top: none; border-radius: 8px; padding: 9px 10px; margin: 2px 0 4px; }
   .field.sub .k { color: var(--gold-text); }
   .muted { color: var(--text-muted); font-size: 13px; }
@@ -161,8 +162,9 @@
   .hero-season .k { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
   .hero-season .v { font-size: 16px; font-weight: 700; color: var(--blue-550); }
   .hero-message-box { margin-top: 14px; background: var(--gold-soft); border-radius: 10px; padding: 13px 14px; text-align: left; }
+  .hero-message-item + .hero-message-item { margin-top: 10px; }
+  .hero-message-k { font-size: 11px; font-weight: 700; color: var(--gold-text); opacity: 0.72; margin-bottom: 3px; }
   .hero-message-line { font-size: 21px; font-weight: 700; color: var(--gold-text); line-height: 1.5; }
-  .hero-message-line + .hero-message-line { margin-top: 8px; }
 
   /* できるようになったこと（本人ページ限定・新規） */
   .achieve-row { background: var(--green-soft); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
@@ -275,6 +277,12 @@ var mandalaDrill = null;                    // 現在ドリルダウン中の要
 var visionExpanded = { goal: false, ultimate: false }; // 将来ビジョンの各項目が開いているか
 var aboutCardOpen = false; // 「競技について」カード自体が開いているか
 
+// コーチ用ページのカード開閉状態（key -> bool）。コーチ・保護者は全項目を見たいが、
+// 全部開いたままだと縦に長すぎるため、見出しタップで開閉する（2026-07-27）。
+// 初期状態は「大会振り返り」のみ開き、他はすべて閉じる。本人ページは常時表示のままで開閉しない。
+var COACH_CARD_DEFAULT_OPEN = { taikai: true };
+var coachCardOpen = Object.assign({}, COACH_CARD_DEFAULT_OPEN);
+
 function apiGet(type, token) {
   var url = API_URL + "?type=" + encodeURIComponent(type) + (token ? "&token=" + encodeURIComponent(token) : "");
   return fetch(url).then(function (r) { return r.json(); });
@@ -365,6 +373,7 @@ window.selectAthlete = function (name) {
   mandalaDrill = null;
   visionExpanded = { goal: false, ultimate: false };
   aboutCardOpen = false;
+  coachCardOpen = Object.assign({}, COACH_CARD_DEFAULT_OPEN);
   render();
   loadAllFor(name);
 };
@@ -375,6 +384,10 @@ window.toggleVision = function (key) {
 };
 window.toggleAboutCard = function () {
   aboutCardOpen = !aboutCardOpen;
+  render();
+};
+window.toggleCoachCard = function (key) {
+  coachCardOpen[key] = !coachCardOpen[key];
   render();
 };
 window.selectMandalaElement = function (name) {
@@ -436,7 +449,18 @@ window.sendNote = function () {
 
 /* ---------------- カード描画 ---------------- */
 
-function cardWrap(tone, title, bodyHtml) {
+// collapseKey を渡し、かつコーチ用ページのときだけ、見出しタップで開閉するカードにする。
+// マークアップは既存の「競技について」カード（renderAboutCard）と同じ card-head clickable ＋ 右端の ▸／▾。
+// 本人ページ（player）では collapseKey を渡しても常時表示のまま（毎日開いてすぐ目に入ることが目的のため）。
+function cardWrap(tone, title, bodyHtml, collapseKey) {
+  if (collapseKey && VIEW_MODE === "coach") {
+    var open = !!coachCardOpen[collapseKey];
+    return '<div class="card"><div class="card-head ' + tone + ' clickable" onclick="toggleCoachCard(\'' + collapseKey + '\')">' +
+      '<span class="dot"></span><h2>' + escHtml(title) + '</h2>' +
+      '<span class="chev" style="margin-left:auto;">' + (open ? "▾" : "▸") + '</span></div>' +
+      (open ? '<div class="card-body">' + bodyHtml + '</div>' : '') +
+      '</div>';
+  }
   return '<div class="card"><div class="card-head ' + tone + '"><span class="dot"></span><h2>' + escHtml(title) + '</h2></div><div class="card-body">' + bodyHtml + '</div></div>';
 }
 
@@ -513,9 +537,11 @@ function renderHero(name) {
     html += '<div class="hero-divider"></div><div class="hero-season"><div class="k">今シーズンの目標成績</div><div class="v">' + escHtml(seiseki) + '</div></div>';
   }
   if (d.importantWord || d.finalMessage) {
+    // ラベル（フォームの設問文と一致させる）は「今シーズンの目標成績」と同じ扱い＝小さめ・やや薄い色。
+    // 値だけだと何の項目か分からない、というVanさんのフィードバックによる（2026-07-27）。
     html += '<div class="hero-message-box">' +
-      (d.importantWord ? '<div class="hero-message-line">' + escHtml(d.importantWord) + '</div>' : '') +
-      (d.finalMessage ? '<div class="hero-message-line">' + escHtml(d.finalMessage) + '</div>' : '') +
+      (d.importantWord ? '<div class="hero-message-item"><div class="hero-message-k">今年一番大切にしたい言葉</div><div class="hero-message-line">' + escHtml(d.importantWord) + '</div></div>' : '') +
+      (d.finalMessage ? '<div class="hero-message-item"><div class="hero-message-k">自分へのメッセージ</div><div class="hero-message-line">' + escHtml(d.finalMessage) + '</div></div>' : '') +
       '</div>';
   }
   html += '</div>';
@@ -587,7 +613,7 @@ function renderVisionCard(name) {
       body = html;
     }
   }
-  return cardWrap("gold", "将来の目標", body);
+  return cardWrap("gold", "将来の目標", body, "vision");
 }
 
 function renderSeasonCard(name) {
@@ -623,7 +649,7 @@ function renderSeasonCard(name) {
     body = goalsHtml + ratingsHtml + cpHtml +
       (d.timestamp ? '<div class="field" style="margin-top:10px;"><div class="k">記入日</div><div class="v">' + escHtml(fmtDate(d.timestamp)) + '</div></div>' : "");
   }
-  return cardWrap("", "今年のシーズン目標", body);
+  return cardWrap("", "今年のシーズン目標", body, "season");
 }
 
 // 本人ページ（player-mode）用: 「今年のシーズン目標」を目標タイルと自己分析に分割したうちの前半
@@ -698,19 +724,25 @@ function renderAchievementsCard(name) {
     }).join("");
   }
   var footer = '<div class="achieve-footer">大会が終わるたびに、できたことがここに増えていきます</div>';
-  return cardWrap("green", "できるようになったこと", rowsHtml + footer);
+  return cardWrap("green", "できるようになったこと", rowsHtml + footer, "achievements");
 }
 
 // 本人ページ（player-mode）限定・新規: 直近の大会振り返りの「次の大会や練習で楽しみなこと」を
 // 小さなカードで1件だけ出す。
 function renderNextFunCard(name) {
   var tc = taikaiCache[name];
-  if (!tc || tc.status !== "loaded" || !tc.data || !tc.data.records || !tc.data.records.length) return "";
-  var latest = tc.data.records[0]; // バックエンドで新しい順に並んでいる
-  var common = latest.common || {};
-  if (!common.nextFunText) return "";
+  var common = null;
+  if (tc && tc.status === "loaded" && tc.data && tc.data.records && tc.data.records.length) {
+    common = tc.data.records[0].common || {}; // バックエンドで新しい順に並んでいる
+  }
+  if (!common || !common.nextFunText) {
+    // 本人ページでは中身がないカードを出さない（毎日開く画面に空欄を増やさないため）。
+    // コーチ用は全項目を見渡せることが目的なので、未回答であることが分かるよう見出しだけ残す。
+    if (VIEW_MODE !== "coach") return "";
+    return cardWrap("", "次の大会や練習で楽しみなこと", '<div class="mandala-empty">まだ回答がありません</div>', "nextfun");
+  }
   var body = '<div class="field"><div class="k">' + escHtml(common.nextFunScope || "楽しみなこと") + '</div><div class="v">' + escHtml(common.nextFunText) + '</div></div>';
-  return cardWrap("", "次の大会や練習で楽しみなこと", body);
+  return cardWrap("", "次の大会や練習で楽しみなこと", body, "nextfun");
 }
 
 // コーチ用「大会振り返り」カード限定: 乖離アラートの判定。
@@ -817,7 +849,7 @@ function renderTaikaiCard(name) {
       body = latestHtml + pastHtml;
     }
   }
-  return cardWrap("", "大会振り返り", body);
+  return cardWrap("", "大会振り返り", body, "taikai");
 }
 
 // 本人ページ（player-mode）限定: 画面最上部に出す「今、大事にしたいこと」カード。
@@ -869,10 +901,12 @@ function renderLifeSupportCard(name) {
   if (placeholder) body = placeholder;
   else {
     var d = c.data;
-    // 「今年一番大切にしたい言葉」「自分へのメッセージ」は目標ヒーロー（renderHero）へ移動したため
-    // ここには出さない（本人がほとんど目にしていなかった最下部の位置から、最上部へ移した）。
+    // 「今年一番大切にしたい言葉」「自分へのメッセージ」は本人ページでは目標ヒーロー（renderHero）に
+    // 大きく出しているためここには出さない。ただしヒーローは本人ページ専用なので、そのまま削除すると
+    // コーチ用のどこにも出なくなってしまう。そのためコーチ用のときだけこのカードの末尾に戻す（2026-07-27）。
+    var showWords = VIEW_MODE === "coach" && (d.importantWord || d.finalMessage);
     var life = d.life, support = d.support;
-    if (!life && !support) body = '<div class="mandala-empty">まだ回答がありません</div>';
+    if (!life && !support && !showWords) body = '<div class="mandala-empty">まだ回答がありません</div>';
     else {
       var html = "";
       if (life) {
@@ -886,10 +920,14 @@ function renderLifeSupportCard(name) {
           if (support[k]) html += '<div class="field"><div class="k">' + escHtml(SUPPORT_LABELS[k]) + '</div><div class="v">' + escHtml(support[k]) + '</div></div>';
         });
       }
+      if (showWords) {
+        if (d.importantWord) html += '<div class="field"><div class="k">今年一番大切にしたい言葉</div><div class="v">' + escHtml(d.importantWord) + '</div></div>';
+        if (d.finalMessage) html += '<div class="field"><div class="k">自分へのメッセージ</div><div class="v">' + escHtml(d.finalMessage) + '</div></div>';
+      }
       body = html;
     }
   }
-  return cardWrap("green", "生活習慣・サポート", body);
+  return cardWrap("green", "生活習慣・サポート", body, "life");
 }
 
 // 9x9の生シート(MICのマンダラチャート(記入用)と同じレイアウト)を、中心目標+8要素(各8アクション)の
@@ -971,7 +1009,7 @@ function renderMandalaCard(name, playerMode) {
       }
     }
   }
-  return cardWrap("gold", "マンダラチャート", body);
+  return cardWrap("gold", "マンダラチャート", body, "mandala");
 }
 
 function renderStgCard(name) {
@@ -991,7 +1029,7 @@ function renderStgCard(name) {
         (e.wantToTry ? '<div class="field"><div class="k">挑戦したい技</div><div class="v">' + escHtml(e.wantToTry) + '</div></div>' : '');
     }
   }
-  return cardWrap("", "短期目標（月次振り返り）", body);
+  return cardWrap("", "短期目標（月次振り返り）", body, "stg");
 }
 
 function renderAirlogCard(name) {
@@ -1033,7 +1071,7 @@ function renderAirlogCard(name) {
       '</div>';
   }
   var toggleBtn = '<div class="btn-row"><button class="btn ' + (open ? "btn-ghost" : "btn-primary") + '" onclick="toggleAirlogForm()">' + (open ? "閉じる" : "＋ 記録を追加") + '</button></div>';
-  return cardWrap("green", "技・ジャンプ記録ログ", listHtml + toggleBtn + formHtml);
+  return cardWrap("green", "技・ジャンプ記録ログ", listHtml + toggleBtn + formHtml, "airlog");
 }
 
 function renderNotesCard(name) {
@@ -1054,7 +1092,7 @@ function renderNotesCard(name) {
       '<div style="margin-top:10px;"><textarea placeholder="メッセージを入力…" oninput="setNoteDraft(this.value)">' + escHtml(noteDraft[name] || "") + '</textarea>' +
       '<div class="btn-row"><button class="btn btn-primary" onclick="sendNote()">送信</button></div></div>';
   }
-  return cardWrap("", "コーチへ共有メモ", body);
+  return cardWrap("", "コーチへ共有メモ", body, "notes");
 }
 
 /* ---------------- 全体描画 ---------------- */
@@ -1103,14 +1141,18 @@ function render() {
       renderNotesCard(current) +
       renderLifeSupportCard(current);
   } else {
-    // コーチ用一覧: 先頭に大会振り返り（全項目・乖離アラートつき）を追加。
+    // コーチ用一覧: コーチ・保護者は全項目を見たいので、本人ページにしか出していなかった
+    // 「できるようになったこと」「次の大会や練習で楽しみなこと」もここに出す。ただし全部開いたままだと
+    // 縦に長すぎるため、見出しタップで開閉する（開くのは初期状態で「大会振り返り」のみ）。
     // 「競技について」カードは、フォームには回答があるのに画面に一切出ていなかった項目のため、
     // コーチ/本人ビュー分岐の対象ではなく単純な表示漏れの修正として両ビューに追加済み。
     app.innerHTML =
       renderTaikaiCard(current) +
+      renderAchievementsCard(current) +
       renderAboutCard(current) +
       renderVisionCard(current) +
       renderSeasonCard(current) +
+      renderNextFunCard(current) +
       renderMandalaCard(current, false) +
       renderStgCard(current) +
       renderAirlogCard(current) +
