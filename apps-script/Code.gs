@@ -93,6 +93,36 @@ var SEASON_FINAL_LABELS = {
   importantWord: '今年一番大切にしたい言葉',
   message: '最後に、今年の自分へのメッセージ'
 };
+
+// 大会振り返りフォーム（回答スプレッドシート、フォーム改修後の新しいID・2026-07-27〜）
+var TAIKAI_FORM_SS_ID = '1Ypd5JbRQyWDiKXMDWFR5VQwut71QCCwWEsnQhC2jc00';
+// 質問見出しの「先頭一致」で列を特定する（大会振り返りフォーム）
+var TAIKAI_LABELS = {
+  meetName: '大会名',
+  meetDate: '日付',
+  events: '出場した種目',
+  kojinRank: '個人競技の順位',
+  kojinScore: '個人競技の点数',
+  kojinFeeling: '今日の演技はどうだった',
+  kojinResultScore: '今日の「結果」には',
+  kojinContentScore: '今日の「演技内容」には',
+  kojinScoreReason: 'その点数をつけた',
+  kojinGoodThing: '今日、一番よかったこと',
+  kojinGoodReason: 'それができたのは',
+  kojinImprove: '一番悔しかったこと',
+  kojinPracticePlan: 'そのために、どんなことを意識',
+  kojinCoachHelp: 'コーチに手伝ってほしいことは',
+  kojinPainFear: '痛み・怖さ・困ったことはあった',
+  kojinPainFearDetail: '具体的にどんなことがあった',
+  syncRank: 'シンクロ競技の順位',
+  syncScore: 'シンクロ競技の点数',
+  syncTiming: 'ペアとのタイミングはどうだった',
+  syncTimingCause: 'タイミングがずれたとしたら',
+  syncGoodThing: 'シンクロで一番うまくできたこと',
+  nextFunScope: '次の大会や練習で楽しみにしていることは',
+  nextFunText: '（具体的に）',
+  selfWord: '今日の自分にひとこと'
+};
 // 競技について（これまでフォームには回答があるのにAPI・画面のどちらにも出ていなかった項目、2026-07-25追加）
 var SEASON_ABOUT_LABELS = {
   startedWhen: 'トランポリンはいつから始めましたか',
@@ -168,6 +198,7 @@ function doGet(e) {
     if (type === 'stg') return jsonOut_(handleStg_(e));
     if (type === 'airlog') return jsonOut_(handleAirlogGet_(e));
     if (type === 'coachnotes') return jsonOut_(handleCoachNotesGet_(e));
+    if (type === 'taikai') return jsonOut_(handleTaikaiGet_(e));
     return jsonOut_({ error: '不明なtypeパラメータです: ' + type });
   } catch (err) {
     return jsonOut_({ error: String(err) });
@@ -237,6 +268,17 @@ function handleSeason_(e) {
     return { label: label, score: val === '' || val === null || val === undefined ? null : Number(val) };
   });
 
+  // 昨年比較用：同一選手の1つ前の年度の回答（複数回答が年度ごとに1行たまる想定）
+  var previousSelfRatings = null;
+  if (rows.length >= 2) {
+    var prevR = rows[rows.length - 2];
+    previousSelfRatings = SEASON_SELF_RATING_LABELS.map(function (label) {
+      var col = findColByPrefix_(headers, label);
+      var val = col >= 0 ? prevR[headers[col]] : null;
+      return { label: label, score: val === '' || val === null || val === undefined ? null : Number(val) };
+    });
+  }
+
   var topCol = findColByPrefix_(headers, '上記');
   var topTwo = topCol >= 0 && r[headers[topCol]] ? String(r[headers[topCol]]).split(',').map(function (s) { return s.trim(); }) : [];
 
@@ -295,6 +337,7 @@ function handleSeason_(e) {
     timestamp: r['タイムスタンプ'] || null,
     goals: goals,
     selfRatings: selfRatings,
+    previousSelfRatings: previousSelfRatings,
     topTwo: topTwo,
     competitionPlans: competitionPlans,
     vision: hasVision ? vision : null,
@@ -387,6 +430,78 @@ function handleCoachNotesGet_(e) {
     return { id: r['id'], timestamp: r['タイムスタンプ'], sender: r['発信者'], text: r['本文'] };
   });
   return { name: name, notes: notes };
+}
+
+// 大会振り返り（新フォーム回答シート、選手ごとに新しい順の配列で返す）
+function handleTaikaiGet_(e) {
+  var name = findAthleteNameByToken_(e.parameter.token);
+  if (!name) return { error: 'invalid_token' };
+  var ss = SpreadsheetApp.openById(TAIKAI_FORM_SS_ID);
+  var sh = ss.getSheets()[0]; // フォームの回答が入る最初のタブ
+  var parsed = readRowsFromSheet_(sh);
+  var headers = parsed.headers;
+  var rows = parsed.rows.filter(function (r) { return r['名前'] === name; });
+
+  function pick(r, prefix) {
+    var col = findColByPrefix_(headers, prefix);
+    if (col < 0) return null;
+    var v = r[headers[col]];
+    return (v === '' || v === null || v === undefined) ? null : v;
+  }
+  function pickNum(r, prefix) {
+    var v = pick(r, prefix);
+    return v === null ? null : Number(v);
+  }
+
+  var records = rows.map(function (r) {
+    var events = pick(r, TAIKAI_LABELS.events) || '';
+    var hasKojin = events !== 'シンクロのみ';
+    var hasSync = events !== '個人のみ';
+
+    var kojin = hasKojin ? {
+      rank: pick(r, TAIKAI_LABELS.kojinRank),
+      score: pickNum(r, TAIKAI_LABELS.kojinScore),
+      feeling: pick(r, TAIKAI_LABELS.kojinFeeling),
+      resultScore: pickNum(r, TAIKAI_LABELS.kojinResultScore),
+      contentScore: pickNum(r, TAIKAI_LABELS.kojinContentScore),
+      scoreReason: pick(r, TAIKAI_LABELS.kojinScoreReason),
+      goodThing: pick(r, TAIKAI_LABELS.kojinGoodThing),
+      goodReason: pick(r, TAIKAI_LABELS.kojinGoodReason),
+      improve: pick(r, TAIKAI_LABELS.kojinImprove),
+      practicePlan: pick(r, TAIKAI_LABELS.kojinPracticePlan),
+      coachHelp: pick(r, TAIKAI_LABELS.kojinCoachHelp),
+      painFear: pick(r, TAIKAI_LABELS.kojinPainFear),
+      painFearDetail: pick(r, TAIKAI_LABELS.kojinPainFearDetail)
+    } : null;
+
+    var sync = hasSync ? {
+      rank: pick(r, TAIKAI_LABELS.syncRank),
+      score: pickNum(r, TAIKAI_LABELS.syncScore),
+      timing: pick(r, TAIKAI_LABELS.syncTiming),
+      timingCause: pick(r, TAIKAI_LABELS.syncTimingCause),
+      goodThing: pick(r, TAIKAI_LABELS.syncGoodThing)
+    } : null;
+
+    return {
+      timestamp: r['タイムスタンプ'] || null,
+      meetName: pick(r, TAIKAI_LABELS.meetName),
+      meetDate: pick(r, TAIKAI_LABELS.meetDate),
+      events: events,
+      kojin: kojin,
+      sync: sync,
+      common: {
+        nextFunScope: pick(r, TAIKAI_LABELS.nextFunScope),
+        nextFunText: pick(r, TAIKAI_LABELS.nextFunText),
+        selfWord: pick(r, TAIKAI_LABELS.selfWord)
+      }
+    };
+  });
+
+  records.sort(function (a, b) {
+    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+  });
+
+  return { name: name, records: records };
 }
 
 // ---------------- POST ----------------
