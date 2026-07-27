@@ -153,6 +153,43 @@
   .subhead { font-size: 12px; font-weight: 700; color: var(--text-secondary); margin: 12px 0 4px; }
   .subhead:first-child { margin-top: 0; }
 
+  /* 目標ヒーロー（本人ページ限定・最上部） */
+  .hero-card { padding: 20px 18px; text-align: center; }
+  .hero-goal { font-size: 21px; font-weight: 800; line-height: 1.45; color: var(--text-primary); }
+  .hero-ultimate { font-size: 13.5px; color: var(--text-secondary); margin-top: 8px; line-height: 1.55; }
+  .hero-divider { height: 1px; background: var(--gridline); margin: 14px 0; }
+  .hero-season .k { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+  .hero-season .v { font-size: 16px; font-weight: 700; color: var(--blue-550); }
+  .hero-message-box { margin-top: 14px; background: var(--gold-soft); border-radius: 10px; padding: 13px 14px; text-align: left; }
+  .hero-message-line { font-size: 21px; font-weight: 700; color: var(--gold-text); line-height: 1.5; }
+  .hero-message-line + .hero-message-line { margin-top: 8px; }
+
+  /* できるようになったこと（本人ページ限定・新規） */
+  .achieve-row { background: var(--green-soft); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .achieve-main { display: flex; align-items: flex-start; gap: 6px; }
+  .achieve-check { color: var(--green-line); font-weight: 700; font-size: 14px; line-height: 1.5; }
+  .achieve-text { font-weight: 700; font-size: 15px; line-height: 1.5; color: var(--text-primary); }
+  .achieve-reason { font-size: 12.5px; color: var(--text-secondary); margin-top: 3px; margin-left: 20px; }
+  .achieve-meta { font-size: 10.5px; color: var(--text-muted); margin-top: 4px; margin-left: 20px; }
+  .achieve-footer { border: 1px dashed var(--border); border-radius: 10px; padding: 12px; text-align: center; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+
+  /* 自己分析: 昨年比マーカー・差分・改善ボックス */
+  .bar-prev-marker { position: absolute; top: -4px; width: 2px; height: 24px; background: var(--text-muted); opacity: 0.6; }
+  .bar-prev-marker::before { content: ""; position: absolute; top: -4px; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+  .bar-diff { font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+  .bar-diff.up { color: var(--green-line); }
+  .bar-diff.flat { color: var(--text-muted); }
+  .self-legend { font-size: 10.5px; color: var(--text-muted); margin-top: 10px; display: flex; align-items: center; gap: 5px; line-height: 1.5; }
+  .self-legend .dot-marker { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); display: inline-block; flex: none; opacity: 0.6; }
+  .self-improve-box { background: var(--green-soft); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.6; margin-top: 10px; color: var(--text-primary); }
+
+  /* 大会振り返り（コーチ用・新規） */
+  .taikai-meet-title { font-size: 15px; font-weight: 700; }
+  .taikai-meet-date { font-size: 11px; color: var(--text-muted); margin-top: 2px; margin-bottom: 8px; }
+  .taikai-alert { background: var(--focus-soft); border: 1px solid var(--focus-line); color: var(--focus-text); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.6; margin: 8px 0; }
+  .taikai-footer { background: var(--page); border-radius: 10px; padding: 9px 10px; font-size: 11.5px; color: var(--text-secondary); margin-top: 10px; line-height: 1.6; }
+  .taikai-footer .k { font-size: 10.5px; color: var(--text-muted); font-weight: 700; margin-bottom: 3px; }
+
   /* 今、大事にしたいこと（本人ページ限定のフォーカスカード） */
   .card-head.focus .dot { background: var(--focus-line); }
   .focus-box { background: var(--focus-soft); border-radius: 10px; padding: 10px 12px; }
@@ -226,6 +263,8 @@ var mandalaCache = {};
 var stgCache = {};
 var airlogCache = {};
 var notesCache = {};
+var taikaiCache = {};
+var taikaiExpanded = {}; // name -> {idx: bool} 過去の大会振り返りの展開状態（コーチ用）
 
 var airlogFormOpen = {};  // name -> bool
 var airlogDraft = {};     // name -> {group, skill, custom, reps, success, memo, videoUrl}
@@ -262,6 +301,13 @@ function fmtDate(d) {
   var dt = new Date(d);
   if (isNaN(dt.getTime())) return String(d);
   return (dt.getMonth() + 1) + "/" + dt.getDate() + " " + ("0" + dt.getHours()).slice(-2) + ":" + ("0" + dt.getMinutes()).slice(-2);
+}
+// 大会日など、時刻を含めず日付だけを表示したいときに使う
+function fmtDateOnly(d) {
+  if (!d) return null;
+  var dt = new Date(d);
+  if (isNaN(dt.getTime())) return String(d);
+  return (dt.getMonth() + 1) + "/" + dt.getDate();
 }
 
 /* ---------------- データ読み込み ---------------- */
@@ -301,8 +347,15 @@ function loadNotes(name) {
     notesCache[name] = { status: "loaded", data: d }; render();
   }).catch(function (err) { notesCache[name] = { status: "error", error: String(err) }; render(); });
 }
+function loadTaikai(name) {
+  if (taikaiCache[name]) return;
+  taikaiCache[name] = { status: "loading" };
+  apiGet("taikai", tokenFor(name)).then(function (d) {
+    taikaiCache[name] = { status: "loaded", data: d }; render();
+  }).catch(function (err) { taikaiCache[name] = { status: "error", error: String(err) }; render(); });
+}
 function loadAllFor(name) {
-  loadSeason(name); loadMandala(name); loadStg(name); loadAirlog(name); loadNotes(name);
+  loadSeason(name); loadMandala(name); loadStg(name); loadAirlog(name); loadNotes(name); loadTaikai(name);
 }
 
 /* ---------------- 操作系 ---------------- */
@@ -326,6 +379,11 @@ window.toggleAboutCard = function () {
 };
 window.selectMandalaElement = function (name) {
   mandalaDrill = name;
+  render();
+};
+window.toggleTaikaiRecord = function (idx) {
+  taikaiExpanded[current] = taikaiExpanded[current] || {};
+  taikaiExpanded[current][idx] = !taikaiExpanded[current][idx];
   render();
 };
 window.mandalaBack = function () {
@@ -385,12 +443,83 @@ function cardWrap(tone, title, bodyHtml) {
 // スコアに応じたバーの色（MICと同じ5段階配色）
 var STEP_COLOR = { 1: "#86b6ef", 2: "#5598e7", 3: "#2a78d6", 4: "#1c5cab", 5: "#104281" };
 
+// 自己分析（5段階評価）のバー表示。昨年度の回答があれば灰色マーカー・差分・凡例・改善ボックスを追加する。
+// コーチ用カード（renderSeasonCard）・本人用カード（renderSelfAssessmentCard）の両方から呼ぶ共通部品。
+function renderSelfRatingsBars(d) {
+  var ratings = d.selfRatings || [];
+  if (!ratings.length) return "";
+  var topTwo = d.topTwo || [];
+  var prevRatings = d.previousSelfRatings || null;
+  var anyImproved = false;
+  var improvedLabels = [];
+  var barsHtml = ratings.map(function (r) {
+    var score = r.score == null ? 0 : r.score;
+    var isFocus = topTwo.indexOf(r.label) >= 0;
+    var color = STEP_COLOR[score] || STEP_COLOR[1];
+    var prevScore = null;
+    if (prevRatings) {
+      var pr = prevRatings.filter(function (x) { return x.label === r.label; })[0];
+      if (pr && pr.score != null) prevScore = pr.score;
+    }
+    var markerHtml = "", diffHtml = "";
+    if (prevScore != null && r.score != null) {
+      markerHtml = '<div class="bar-prev-marker" style="left:' + (prevScore / 5 * 100) + '%;"></div>';
+      var diff = r.score - prevScore;
+      if (diff > 0) { anyImproved = true; improvedLabels.push(r.label); }
+      var diffText = diff > 0 ? ("+" + diff + " ↑") : (diff === 0 ? "±0" : String(diff));
+      diffHtml = '<span class="bar-diff ' + (diff > 0 ? "up" : "flat") + '">' + diffText + '</span>';
+    }
+    return '<div class="bar-row">' +
+      '<div class="name">' + escHtml(r.label) + (isFocus ? '<span class="focus-chip">★</span>' : '') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:6px;">' +
+      '<div class="bar-track" style="flex:1;">' +
+      '<div class="bar-fill" style="width:' + (score / 5 * 100) + '%;background:' + color + ';"><span>' + (r.score == null ? "-" : r.score) + '</span></div>' +
+      markerHtml +
+      '</div>' + diffHtml +
+      '</div></div>';
+  }).join("");
+  var focusNote = topTwo.length ? '<div class="focus-note"><span class="focus-chip">★</span> 今年特に伸ばしたい項目: ' + escHtml(topTwo.join("・")) + '</div>' : "";
+  var legendHtml = prevRatings ? '<div class="self-legend"><span class="dot-marker"></span>昨年の自分。バーがこの印より右にあれば、伸びた分です。</div>' : "";
+  var improveBoxHtml = (prevRatings && anyImproved)
+    ? '<div class="self-improve-box">去年の自分とくらべて、' + escHtml(improvedLabels.join("・")) + 'が伸びました。去年つけた点数は消えません。来年の自分が、今年のこの印を追いこしていこう。</div>'
+    : "";
+  return '<div class="bars">' + barsHtml + '</div>' + focusNote + legendHtml + improveBoxHtml;
+}
+
 function seasonPlaceholder(c) {
   if (!c || c.status === "loading") return '<div class="mandala-empty">読み込み中…</div>';
   if (c.status === "error") return '<div class="mandala-empty">読み込みに失敗しました</div>';
   if (c.data && c.data.error) return '<div class="mandala-empty">' + escHtml(c.data.error) + '</div>';
   if (!c.data || !c.data.hasEntry) return '<div class="mandala-empty">まだシーズン目標が登録されていません</div>';
   return null;
+}
+
+// 目標ヒーロー（本人ページ限定・最上部）。既存のシーズン目標データから、カルテを開いた瞬間に
+// 必ず目に入る「壁に貼った目標の紙」を作る。分析結果や課題はここには置かない。
+// 「今年一番大切にしたい言葉」「自分へのメッセージ」は元々「生活習慣・サポート」カードの最下部に
+// あったが、本人がほとんど目にしていなかったためこちらへ移動し、生活習慣カード側からは削除した。
+function renderHero(name) {
+  var c = seasonCache[name];
+  if (!c || c.status === "loading") return "";
+  if (c.status === "error" || !c.data || !c.data.hasEntry) return "";
+  var d = c.data;
+  var v = d.vision || {};
+  var seiseki = (d.goals || {})["成績"];
+  if (!v.goal && !v.ultimate && !seiseki && !d.importantWord && !d.finalMessage) return "";
+  var html = '<div class="card hero-card">';
+  if (v.goal) html += '<div class="hero-goal">' + escHtml(v.goal) + '</div>';
+  if (v.ultimate) html += '<div class="hero-ultimate">' + escHtml(v.ultimate) + '</div>';
+  if (seiseki) {
+    html += '<div class="hero-divider"></div><div class="hero-season"><div class="k">今シーズンの目標成績</div><div class="v">' + escHtml(seiseki) + '</div></div>';
+  }
+  if (d.importantWord || d.finalMessage) {
+    html += '<div class="hero-message-box">' +
+      (d.importantWord ? '<div class="hero-message-line">' + escHtml(d.importantWord) + '</div>' : '') +
+      (d.finalMessage ? '<div class="hero-message-line">' + escHtml(d.finalMessage) + '</div>' : '') +
+      '</div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 // 「競技について」カード：これまでフォームに回答があるのに画面に出ていなかった6項目
@@ -476,22 +605,9 @@ function renderSeasonCard(name) {
       return tile + '<div class="k">' + escHtml(GOAL_LABELS[key]) + '</div><div class="v">' + escHtml(v || "まだ回答がありません") + '</div></div>';
     }).join("") + '</div>';
 
-    var ratings = d.selfRatings || [];
-    var topTwo = d.topTwo || [];
-    var ratingsHtml = "";
-    if (ratings.length) {
-      var barsHtml = ratings.map(function (r) {
-        var score = r.score == null ? 0 : r.score;
-        var isFocus = topTwo.indexOf(r.label) >= 0;
-        var color = STEP_COLOR[score] || STEP_COLOR[1];
-        return '<div class="bar-row">' +
-          '<div class="name">' + escHtml(r.label) + (isFocus ? '<span class="focus-chip">★</span>' : '') + '</div>' +
-          '<div class="bar-track"><div class="bar-fill" style="width:' + (score / 5 * 100) + '%;background:' + color + ';"><span>' + (r.score == null ? "-" : r.score) + '</span></div></div>' +
-          '</div>';
-      }).join("");
-      var focusNote = topTwo.length ? '<div class="focus-note"><span class="focus-chip">★</span> 今年特に伸ばしたい項目: ' + escHtml(topTwo.join("・")) + '</div>' : "";
-      ratingsHtml = '<div class="subhead">自己分析（5段階評価）</div><div class="bars">' + barsHtml + '</div>' + focusNote;
-    }
+    var ratingsHtml = (d.selfRatings || []).length
+      ? '<div class="subhead">自己分析（5段階評価）</div>' + renderSelfRatingsBars(d)
+      : "";
 
     var cp = d.competitionPlans || {};
     var cpRows = [
@@ -552,23 +668,156 @@ function renderSelfAssessmentCard(name) {
   else {
     var d = c.data;
     var ratings = d.selfRatings || [];
-    var topTwo = d.topTwo || [];
     if (!ratings.length) body = '<div class="mandala-empty">まだ回答がありません</div>';
-    else {
-      var barsHtml = ratings.map(function (r) {
-        var score = r.score == null ? 0 : r.score;
-        var isFocus = topTwo.indexOf(r.label) >= 0;
-        var color = STEP_COLOR[score] || STEP_COLOR[1];
-        return '<div class="bar-row">' +
-          '<div class="name">' + escHtml(r.label) + (isFocus ? '<span class="focus-chip">★</span>' : '') + '</div>' +
-          '<div class="bar-track"><div class="bar-fill" style="width:' + (score / 5 * 100) + '%;background:' + color + ';"><span>' + (r.score == null ? "-" : r.score) + '</span></div></div>' +
-          '</div>';
-      }).join("");
-      var focusNote = topTwo.length ? '<div class="focus-note"><span class="focus-chip">★</span> 今年特に伸ばしたい項目: ' + escHtml(topTwo.join("・")) + '</div>' : "";
-      body = '<div class="bars">' + barsHtml + '</div>' + focusNote;
-    }
+    else body = renderSelfRatingsBars(d);
   }
   return cardWrap("", "今の自分（自己分析）", body);
+}
+
+// 本人ページ（player-mode）限定・新規: 大会振り返りの「よかったこと・うまくできたこと」だけを
+// 全レコードから古い順に積み上げて表示する。このリストは減らない（大会を重ねるほど増える）ことが
+// 本人ページに大会データを出す主目的。順位・点数・悔しかったことなどは一切出さない。
+function renderAchievementsCard(name) {
+  var tc = taikaiCache[name];
+  var rowsHtml = "";
+  if (!tc || tc.status === "loading") rowsHtml = '<div class="loading-line">読み込み中…</div>';
+  else if (tc.status === "error") rowsHtml = "";
+  else if (tc.data && tc.data.records && tc.data.records.length) {
+    var items = tc.data.records
+      .filter(function (r) { return r.kojin && r.kojin.goodThing; })
+      .slice() // 破壊的sortを避ける
+      .sort(function (a, b) { return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(); }); // 古い順
+    rowsHtml = items.map(function (r) {
+      var k = r.kojin;
+      var meta = [r.meetName, fmtDateOnly(r.meetDate)].filter(Boolean).join("・");
+      return '<div class="achieve-row">' +
+        '<div class="achieve-main"><span class="achieve-check">✓</span><span class="achieve-text">' + escHtml(k.goodThing) + '</span></div>' +
+        (k.goodReason ? '<div class="achieve-reason">' + escHtml(k.goodReason) + '</div>' : "") +
+        (meta ? '<div class="achieve-meta">' + escHtml(meta) + '</div>' : "") +
+        '</div>';
+    }).join("");
+  }
+  var footer = '<div class="achieve-footer">大会が終わるたびに、できたことがここに増えていきます</div>';
+  return cardWrap("green", "できるようになったこと", rowsHtml + footer);
+}
+
+// 本人ページ（player-mode）限定・新規: 直近の大会振り返りの「次の大会や練習で楽しみなこと」を
+// 小さなカードで1件だけ出す。
+function renderNextFunCard(name) {
+  var tc = taikaiCache[name];
+  if (!tc || tc.status !== "loaded" || !tc.data || !tc.data.records || !tc.data.records.length) return "";
+  var latest = tc.data.records[0]; // バックエンドで新しい順に並んでいる
+  var common = latest.common || {};
+  if (!common.nextFunText) return "";
+  var body = '<div class="field"><div class="k">' + escHtml(common.nextFunScope || "楽しみなこと") + '</div><div class="v">' + escHtml(common.nextFunText) + '</div></div>';
+  return cardWrap("", "次の大会や練習で楽しみなこと", body);
+}
+
+// コーチ用「大会振り返り」カード限定: 乖離アラートの判定。
+// (1) 結果への満足度と演技内容への満足度の差が30以上、または
+// (2) 大会の点数がシーズン目標の90%以上なのに、結果への満足度（自己採点）が50未満、のとき警告する。
+function computeDiscrepancy(kojin, seasonGoalText) {
+  if (!kojin) return null;
+  var reasons = [];
+  var result = kojin.resultScore, content = kojin.contentScore;
+  if (result != null && content != null && Math.abs(result - content) >= 30) {
+    reasons.push("結果への満足度（" + result + "点）と演技内容への満足度（" + content + "点）の差が大きい");
+  }
+  if (kojin.score != null && seasonGoalText) {
+    var m = String(seasonGoalText).match(/(\d+(\.\d+)?)/);
+    if (m) {
+      var target = Number(m[1]);
+      if (target > 0 && result != null) {
+        var pct = kojin.score / target * 100;
+        if (pct >= 90 && result < 50) {
+          reasons.push("目標" + target + "点に対し" + kojin.score + "点（" + Math.round(pct) + "%）ながら、本人の自己採点は" + result + "点");
+        }
+      }
+    }
+  }
+  return reasons.length ? reasons : null;
+}
+
+// コーチ用「大会振り返り」カードの1大会分の中身（最新の展開表示・過去分の折りたたみ展開の両方で使う）
+function renderTaikaiRecordBody(r, seasonGoalText) {
+  var kojin = r.kojin, sync = r.sync;
+  var tiles = "";
+  if (kojin) {
+    tiles += '<div class="goal-tile"><div class="k">個人・順位/点数</div><div class="v">' + escHtml(kojin.rank || "-") + " / " + escHtml(kojin.score != null ? kojin.score : "-") + '</div></div>';
+    tiles += '<div class="goal-tile"><div class="k">結果への満足度</div><div class="v">' + escHtml(kojin.resultScore != null ? kojin.resultScore + "点" : "-") + '</div></div>';
+    tiles += '<div class="goal-tile"><div class="k">演技内容への満足度</div><div class="v">' + escHtml(kojin.contentScore != null ? kojin.contentScore + "点" : "-") + '</div></div>';
+  }
+  if (sync) {
+    tiles += '<div class="goal-tile"><div class="k">シンクロ・順位/点数</div><div class="v">' + escHtml(sync.rank || "-") + " / " + escHtml(sync.score != null ? sync.score : "-") + '</div></div>';
+  }
+  var tilesHtml = tiles ? '<div class="goal-grid">' + tiles + '</div>' : "";
+
+  var discrepancy = computeDiscrepancy(kojin, seasonGoalText);
+  var alertHtml = discrepancy ? '<div class="taikai-alert">' + escHtml(discrepancy.join("。") + "。結果と自己評価が大きく離れています。") + '</div>' : "";
+
+  var fields = [];
+  if (kojin) {
+    if (kojin.feeling) fields.push(["演技はどうだった", kojin.feeling]);
+    if (kojin.improve) fields.push(["悔しかったこと・改善したいこと", kojin.improve]);
+    if (kojin.scoreReason) fields.push(["点数の理由", kojin.scoreReason]);
+    if (kojin.coachHelp) fields.push(["コーチに手伝ってほしいこと", kojin.coachHelp]);
+    if (kojin.painFear && kojin.painFear !== "なかった") fields.push(["痛み・怖さ・困ったこと", kojin.painFearDetail || kojin.painFear]);
+  }
+  if (sync) {
+    if (sync.timing) fields.push(["ペアとのタイミング", sync.timing]);
+    if (sync.timingCause) fields.push(["ずれた原因", sync.timingCause]);
+  }
+  var fieldsHtml = fields.map(function (p) {
+    return '<div class="field"><div class="k">' + escHtml(p[0]) + '</div><div class="v">' + escHtml(p[1]) + '</div></div>';
+  }).join("");
+
+  var shownToPlayer = [];
+  if (kojin && kojin.goodThing) shownToPlayer.push("できたこと: " + kojin.goodThing);
+  if (kojin && kojin.practicePlan) shownToPlayer.push("練習: " + kojin.practicePlan);
+  if (r.common && r.common.nextFunText) shownToPlayer.push("楽しみ: " + r.common.nextFunText);
+  if (r.common && r.common.selfWord) shownToPlayer.push("ひとこと: " + r.common.selfWord);
+  var footerHtml = shownToPlayer.length
+    ? '<div class="taikai-footer"><div class="k">本人ページにも出している言葉</div>' + escHtml(shownToPlayer.join(" / ")) + '</div>'
+    : "";
+
+  return tilesHtml + alertHtml + fieldsHtml + footerHtml;
+}
+
+// コーチ用限定・新規: 大会振り返りの全項目。最新の大会は展開表示、過去分はタップで折りたたみ展開。
+function renderTaikaiCard(name) {
+  var tc = taikaiCache[name];
+  var body;
+  if (!tc || tc.status === "loading") body = '<div class="mandala-empty">読み込み中…</div>';
+  else if (tc.status === "error") body = '<div class="mandala-empty">読み込みに失敗しました</div>';
+  else {
+    var records = (tc.data && tc.data.records) || [];
+    if (!records.length) body = '<div class="mandala-empty">まだ大会振り返りが記録されていません</div>';
+    else {
+      var sc = seasonCache[name];
+      var seasonGoalText = (sc && sc.status === "loaded" && sc.data && sc.data.goals) ? sc.data.goals["成績"] : null;
+      var latest = records[0];
+      var latestMeta = [latest.meetName, fmtDateOnly(latest.meetDate)].filter(Boolean);
+      var latestHtml =
+        '<div class="taikai-meet-title">' + escHtml(latest.meetName || "（大会名なし）") + '</div>' +
+        '<div class="taikai-meet-date">' + escHtml(fmtDateOnly(latest.meetDate) || "") + '</div>' +
+        renderTaikaiRecordBody(latest, seasonGoalText);
+      var pastHtml = "";
+      if (records.length > 1) {
+        pastHtml = records.slice(1).map(function (r, i) {
+          var idx = i + 1;
+          var open = !!(taikaiExpanded[name] && taikaiExpanded[name][idx]);
+          return '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gridline);">' +
+            '<div class="card-head clickable" style="padding:0 0 4px;" onclick="toggleTaikaiRecord(' + idx + ')">' +
+            '<span class="dot"></span><h2 style="font-size:12.5px;">' + escHtml(r.meetName || "（大会名なし）") + (r.meetDate ? "（" + escHtml(fmtDateOnly(r.meetDate)) + "）" : "") + '</h2>' +
+            '<span class="chev" style="margin-left:auto;">' + (open ? "▾" : "▸") + '</span></div>' +
+            (open ? renderTaikaiRecordBody(r, seasonGoalText) : "") +
+            '</div>';
+        }).join("");
+      }
+      body = latestHtml + pastHtml;
+    }
+  }
+  return cardWrap("", "大会振り返り", body);
 }
 
 // 本人ページ（player-mode）限定: 画面最上部に出す「今、大事にしたいこと」カード。
@@ -581,6 +830,11 @@ function renderFocusCard(name) {
   if (sc && sc.status === "loaded" && sc.data && sc.data.hasEntry) {
     var topTwo = sc.data.topTwo || [];
     if (topTwo.length) items.push({ k: "今年とくに伸ばしたい力", v: topTwo.join("・") });
+  }
+
+  if (taikaiCache[name] && taikaiCache[name].status === "loaded" && taikaiCache[name].data && taikaiCache[name].data.records && taikaiCache[name].data.records.length) {
+    var latestWithPlan = taikaiCache[name].data.records.filter(function (r) { return r.kojin && r.kojin.practicePlan; })[0];
+    if (latestWithPlan) items.push({ k: "いま練習でやっていること", v: latestWithPlan.kojin.practicePlan });
   }
 
   var stc = stgCache[name];
@@ -615,8 +869,10 @@ function renderLifeSupportCard(name) {
   if (placeholder) body = placeholder;
   else {
     var d = c.data;
+    // 「今年一番大切にしたい言葉」「自分へのメッセージ」は目標ヒーロー（renderHero）へ移動したため
+    // ここには出さない（本人がほとんど目にしていなかった最下部の位置から、最上部へ移した）。
     var life = d.life, support = d.support;
-    if (!life && !support && !d.finalMessage) body = '<div class="mandala-empty">まだ回答がありません</div>';
+    if (!life && !support) body = '<div class="mandala-empty">まだ回答がありません</div>';
     else {
       var html = "";
       if (life) {
@@ -629,12 +885,6 @@ function renderLifeSupportCard(name) {
         Object.keys(SUPPORT_LABELS).forEach(function (k) {
           if (support[k]) html += '<div class="field"><div class="k">' + escHtml(SUPPORT_LABELS[k]) + '</div><div class="v">' + escHtml(support[k]) + '</div></div>';
         });
-      }
-      if (d.importantWord || d.finalMessage) {
-        html += '<div class="message-box">' +
-          (d.importantWord ? '<div class="k">今年一番大切にしたい言葉</div>' + escHtml(d.importantWord) : '') +
-          (d.finalMessage ? '<div class="k" style="margin-top:8px;">自分へのメッセージ</div>' + escHtml(d.finalMessage) : '') +
-          '</div>';
       }
       body = html;
     }
@@ -833,23 +1083,31 @@ function render() {
   }
 
   if (VIEW_MODE === "player") {
-    // 本人ページ: 上部に「今、大事にしたいこと」、シーズン目標は目標／自己分析の2枚に分割
+    // 本人ページ: 最上部に目標ヒーロー、続いて「今、大事にしたいこと」（練習中のことを追加）、
+    // 「できるようになったこと」（大会振り返りの前向きな情報のみ）、シーズン目標は目標／自己分析
+    // （昨年比つき）の2枚に分割、「次の大会や練習で楽しみなこと」を小さく追加。
+    // 大会の順位・点数・満足度・悔しかったこと等は一切出さない（本人ページに出さないものの一覧は
+    // 選手カルテ_大会振り返り反映_実装指示書の「2-6」参照）。
     app.innerHTML =
+      renderHero(current) +
       renderFocusCard(current) +
+      renderAchievementsCard(current) +
       renderAboutCard(current) +
       renderVisionCard(current) +
       renderGoalsCard(current) +
       renderSelfAssessmentCard(current) +
+      renderNextFunCard(current) +
       renderMandalaCard(current, true) +
       renderStgCard(current) +
       renderAirlogCard(current) +
       renderNotesCard(current) +
       renderLifeSupportCard(current);
   } else {
-    // コーチ用一覧: 従来のレイアウトを維持（今回「競技について」カードのみ追加。
-    // フォームには回答があるのに画面に一切出ていなかった項目のため、コーチ/本人ビュー分岐の
-    // 対象ではなく単純な表示漏れの修正として両ビューに追加）
+    // コーチ用一覧: 先頭に大会振り返り（全項目・乖離アラートつき）を追加。
+    // 「競技について」カードは、フォームには回答があるのに画面に一切出ていなかった項目のため、
+    // コーチ/本人ビュー分岐の対象ではなく単純な表示漏れの修正として両ビューに追加済み。
     app.innerHTML =
+      renderTaikaiCard(current) +
       renderAboutCard(current) +
       renderVisionCard(current) +
       renderSeasonCard(current) +
