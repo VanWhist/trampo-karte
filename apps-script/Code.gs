@@ -141,9 +141,12 @@ var TAIKAI_RESULT_SHEET = '大会公式リザルト';
 //      実データ 18.6（= (10 − 0.7) × 2）とも一致する。
 //  D … 加点方式で上限なし（難しい技を入れるほど上がる）。
 //  T … 跳躍時間そのもの（1秒1点）で上限なし。
-// 注意：§15.4 により、演技が中断された場合などは CJP が有効種目数を決め、E・H・S の満点が
-// これより小さくなることがある。10種目を完遂した通常の演技ではこの値でよい。
-var TAIKAI_RESULT_MAX = { E_kojin: 20, E_sync: 10, H: 10, S: 20 };
+// §15.4 により有効種目数は CJP が決めるため、演技が中断された場合などは E・H・S の満点が
+// 下がる。そこで満点は固定値ではなく「1種目あたりの満点 × 有効種目数」で求める
+// （有効種目数は S1〜S10 の入力数から数える）。10種目を完遂した通常の演技では
+// E 個人20／E シンクロ10／H 10／S 20 となり、従来の固定値と同じ結果になる。
+var TAIKAI_MAX_PER_ELEMENT = { E_kojin: 2.0, E_sync: 1.0, H: 1.0, S: 2.0 };
+var TAIKAI_DEFAULT_ELEMENTS = 10;
 // 競技について（これまでフォームには回答があるのにAPI・画面のどちらにも出ていなかった項目、2026-07-25追加）
 var SEASON_ABOUT_LABELS = {
   startedWhen: 'トランポリンはいつから始めましたか',
@@ -304,6 +307,39 @@ function numOrNull_(v) {
   return isNaN(n) ? null : n;
 }
 
+// 1行分の有効種目数と、そこから導いた E・H・S の満点を求める。
+// 有効種目数は S1〜S10 の入力数（0点も1種目として数えるので、空欄かどうかで判定する）。
+// 求めた満点は、Vanさんが実データ5件で検算した式 E = 満点 −(S1〜S10合計 + L)/10 で自己検証する。
+// 検証が通らない場合（S列が未転記／一部だけ入力、など）は分母を出さない。
+// 未確認のまま分母を書くと、本人が自分の点数を読み違えるため。
+function computeResultMaxima_(r, isSync) {
+  var sum = 0, count = 0;
+  for (var i = 1; i <= 10; i++) {
+    var v = numOrNull_(r['S' + i]);
+    if (v !== null) { count++; sum += v; }
+  }
+  var E = numOrNull_(r['E']);
+  var L = numOrNull_(r['L']) || 0;
+  var per = isSync ? TAIKAI_MAX_PER_ELEMENT.E_sync : TAIKAI_MAX_PER_ELEMENT.E_kojin;
+
+  // S列が1つも入っていないときは検算できない。通常の10種目とみなして満点を出す。
+  if (count === 0) {
+    var n0 = TAIKAI_DEFAULT_ELEMENTS;
+    return { elements: null, verified: false,
+      EMax: per * n0, HMax: TAIKAI_MAX_PER_ELEMENT.H * n0, SMax: isSync ? TAIKAI_MAX_PER_ELEMENT.S * n0 : null };
+  }
+  // 数えた種目数、それが合わなければ通常の10種目、の順に検算する。
+  var candidates = (count === TAIKAI_DEFAULT_ELEMENTS) ? [count] : [count, TAIKAI_DEFAULT_ELEMENTS];
+  for (var c = 0; c < candidates.length; c++) {
+    var n = candidates[c];
+    if (E !== null && Math.abs((per * n - (sum + L) / 10) - E) < 0.005) {
+      return { elements: n, verified: true,
+        EMax: per * n, HMax: TAIKAI_MAX_PER_ELEMENT.H * n, SMax: isSync ? TAIKAI_MAX_PER_ELEMENT.S * n : null };
+    }
+  }
+  return { elements: count, verified: false, EMax: null, HMax: null, SMax: null };
+}
+
 // 大会公式リザルトタブを読み、選手名で絞って正規化した配列を返す。
 // タブが存在しない場合も落とさず空配列を返す（カルテ全体が読めなくなるのを避けるため）。
 function readTaikaiResults_(ss, name) {
@@ -315,6 +351,7 @@ function readTaikaiResults_(ss, name) {
     .map(function (r) {
       var event = String(r['種目'] || '').trim();
       var isSync = event.indexOf('シンクロ') >= 0;
+      var mx = computeResultMaxima_(r, isSync);
       return {
         id: r['id'] || null,
         meetName: r['大会名'] || null,
@@ -327,13 +364,15 @@ function readTaikaiResults_(ss, name) {
         // L は実施減点の一部で、すでに E に含まれている（E = 満点 −(S1〜S10合計 + L)/10）。
         // 総得点から別途引くと二重減点になるので、記録するだけで計算には使わない。
         E: numOrNull_(r['E']),
-        EMax: isSync ? TAIKAI_RESULT_MAX.E_sync : TAIKAI_RESULT_MAX.E_kojin,
+        EMax: mx.EMax,
         D: numOrNull_(r['D']),
         H: numOrNull_(r['H']),
-        HMax: TAIKAI_RESULT_MAX.H,
+        HMax: mx.HMax,
         T: isSync ? null : numOrNull_(r['T']),          // T と Synchro は別列。個人行はSynchro空欄、
         synchro: isSync ? numOrNull_(r['Synchro']) : null, // シンクロ行はT空欄。1列に兼用しない。
-        synchroMax: isSync ? TAIKAI_RESULT_MAX.S : null,
+        synchroMax: mx.SMax,
+        elements: mx.elements,       // 有効種目数（S1〜S10の入力数。0件なら null）
+        maxVerified: mx.verified,    // 満点を E の計算式で検算できたか
         L: numOrNull_(r['L']),
         P: numOrNull_(r['P']),
         sourceUrl: r['ソースURL'] || null
