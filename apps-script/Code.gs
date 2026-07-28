@@ -121,8 +121,25 @@ var TAIKAI_LABELS = {
   syncGoodThing: 'シンクロで一番うまくできたこと',
   nextFunScope: '次の大会や練習で楽しみにしていることは',
   nextFunText: '（具体的に）',
-  selfWord: '今日の自分にひとこと'
+  selfWord: '今日の自分にひとこと',
+  // 2026-07-28のフォーム改修で追加した3問（回答シートでは右端28〜30列に付く）。
+  // 既存行（2026-07-26）は改修前の回答なので空欄のまま。空欄は「未回答」として静かに畳む。
+  kojinGoalAchieved: '大会前に決めていた目標は',
+  kojinScoreFocus: 'その点数をつけるとき',   // 「その点数をつけた一番大きな理由は？」とは先頭が異なるので衝突しない
+  kojinMainIssue: 'どこが一番課題だったと思う'
 };
+
+// 大会公式リザルト（sporttech.io からの転記。回答スプレッドシート内の別タブ）
+// フォームの回答列に手動列を混ぜると壊れやすいため別タブにしている。
+var TAIKAI_RESULT_SHEET = '大会公式リザルト';
+// 得点内訳の満点。分母を併記できるのは満点が確認できているものだけ。
+//  E … 個人20点・シンクロ10点満点からの減点方式（日本体操協会の採点解説、および
+//      E = 満点 −(S1〜S10合計 + L)/10 の実データ5件での検算一致で確認）
+//  H … 10点満点からの減点方式（日本体操協会の採点解説で確認、瑛斗の実データ9.3とも矛盾なし）
+//  D … 加点方式で上限なし（難しい技を入れるほど上がる）
+//  T … 跳躍時間そのもの（1秒1点）で上限なし
+//  Synchro（同時性）… 公式ルール上は10点満点とされるが、実データ18.6と一致せず未確認のため分母を出さない
+var TAIKAI_RESULT_MAX = { E_kojin: 20, E_sync: 10, H: 10 };
 // 競技について（これまでフォームには回答があるのにAPI・画面のどちらにも出ていなかった項目、2026-07-25追加）
 var SEASON_ABOUT_LABELS = {
   startedWhen: 'トランポリンはいつから始めましたか',
@@ -242,6 +259,81 @@ function readRowsFromSheet_(sh) {
     rows.push(obj);
   }
   return { headers: headers, rows: rows };
+}
+
+// 大会名の表記ゆれを吸収して突き合わせキーにする。
+// 手入力時にタブ文字や前後の空白が混入した実例があり、見た目では気付けないまま文字列照合だけが
+// 一致しなくなるため、空白類（半角・全角・タブ）をすべて除いたものをキーにする。
+function meetKey_(v) {
+  if (v === null || v === undefined) return '';
+  return String(v).replace(/[\s　]/g, '');
+}
+
+// 日付の表記ゆれを YYYY-MM-DD に正規化する（表示用。突き合わせには使わない）。
+// 回答シートは 2026/07/26（スラッシュ、Date型になることもある）、大会公式リザルトタブは
+// 2026-07-26（ハイフン・テキスト固定）。テキスト固定はDate型への自動変換でデータが壊れる不具合を
+// このプロジェクト群で実際に踏んだための対策なので、リザルト側をDate型に直してはいけない。
+// 予選と決勝が別日開催になる大会があるため、突き合わせに日付は使わない（名前＋大会名で行う）。
+function normalizeDate_(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd');
+  }
+  var s = String(v).trim();
+  var m = s.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
+  if (!m) return null;
+  function pad(n) { return (n.length === 1 ? '0' : '') + n; }
+  return m[1] + '-' + pad(m[2]) + '-' + pad(m[3]);
+}
+
+// 順位の表記ゆれを数値にする。既存行は「7位」「10位」、フォーム経由の新規入力は数値のみ。
+// TEXTの自由入力なので、数字以外が混ざっていても数値部分だけを取り出す。
+function normalizeRank_(v) {
+  if (v === null || v === undefined || v === '') return null;
+  var m = String(v).match(/\d+/);
+  return m ? Number(m[0]) : null;
+}
+
+function numOrNull_(v) {
+  if (v === null || v === undefined || v === '') return null;
+  var n = Number(v);
+  return isNaN(n) ? null : n;
+}
+
+// 大会公式リザルトタブを読み、選手名で絞って正規化した配列を返す。
+// タブが存在しない場合も落とさず空配列を返す（カルテ全体が読めなくなるのを避けるため）。
+function readTaikaiResults_(ss, name) {
+  var sh = ss.getSheetByName(TAIKAI_RESULT_SHEET);
+  if (!sh) return [];
+  var parsed = readRowsFromSheet_(sh);
+  return parsed.rows
+    .filter(function (r) { return String(r['名前']).trim() === name; })
+    .map(function (r) {
+      var event = String(r['種目'] || '').trim();
+      var isSync = event.indexOf('シンクロ') >= 0;
+      return {
+        id: r['id'] || null,
+        meetName: r['大会名'] || null,
+        meetKey: meetKey_(r['大会名']),
+        meetDate: normalizeDate_(r['日付']),
+        event: event,                       // 個人 / シンクロ
+        round: String(r['ラウンド'] || '').trim() || null,  // 予選 / 決勝
+        rank: normalizeRank_(r['順位']),
+        total: numOrNull_(r['総得点']),
+        // L は実施減点の一部で、すでに E に含まれている（E = 満点 −(S1〜S10合計 + L)/10）。
+        // 総得点から別途引くと二重減点になるので、記録するだけで計算には使わない。
+        E: numOrNull_(r['E']),
+        EMax: isSync ? TAIKAI_RESULT_MAX.E_sync : TAIKAI_RESULT_MAX.E_kojin,
+        D: numOrNull_(r['D']),
+        H: numOrNull_(r['H']),
+        HMax: TAIKAI_RESULT_MAX.H,
+        T: isSync ? null : numOrNull_(r['T']),          // T と Synchro は別列。個人行はSynchro空欄、
+        synchro: isSync ? numOrNull_(r['Synchro']) : null, // シンクロ行はT空欄。1列に兼用しない。
+        L: numOrNull_(r['L']),
+        P: numOrNull_(r['P']),
+        sourceUrl: r['ソースURL'] || null
+      };
+    });
 }
 
 function handleSeason_(e) {
@@ -453,6 +545,10 @@ function handleTaikaiGet_(e) {
     return v === null ? null : Number(v);
   }
 
+  // 大会公式リザルト（E/D/H/T の得点内訳）。大会ごとの行として持ち、日付で振り返り行に結び付ける。
+  // 推移表示へ切り替えるときに描画だけを変えれば済むよう、レコード側にも配列のまま持たせる。
+  var allResults = readTaikaiResults_(ss, name);
+
   var records = rows.map(function (r) {
     var events = pick(r, TAIKAI_LABELS.events) || '';
     var hasKojin = events !== 'シンクロのみ';
@@ -471,7 +567,11 @@ function handleTaikaiGet_(e) {
       practicePlan: pick(r, TAIKAI_LABELS.kojinPracticePlan),
       coachHelp: pick(r, TAIKAI_LABELS.kojinCoachHelp),
       painFear: pick(r, TAIKAI_LABELS.kojinPainFear),
-      painFearDetail: pick(r, TAIKAI_LABELS.kojinPainFearDetail)
+      painFearDetail: pick(r, TAIKAI_LABELS.kojinPainFearDetail),
+      // 2026-07-28追加の3問。改修前の回答行では null になる（画面側で静かに畳む）。
+      goalAchieved: pick(r, TAIKAI_LABELS.kojinGoalAchieved),
+      scoreFocus: pick(r, TAIKAI_LABELS.kojinScoreFocus),
+      mainIssue: pick(r, TAIKAI_LABELS.kojinMainIssue)
     } : null;
 
     var sync = hasSync ? {
@@ -482,13 +582,22 @@ function handleTaikaiGet_(e) {
       goodThing: pick(r, TAIKAI_LABELS.syncGoodThing)
     } : null;
 
+    var meetDate = pick(r, TAIKAI_LABELS.meetDate);
+    var meetName = pick(r, TAIKAI_LABELS.meetName);
+    // 突き合わせは名前＋大会名で行う（名前は readTaikaiResults_ で絞り込み済み）。
+    // 日付は使わない：予選と決勝が別日開催になる大会があり、日付で絞ると片方が落ちるため。
+    // 該当する行は全行をそのまま渡し、「個人は決勝を拾う」のような決め打ちは画面側でもしない。
+    var mk = meetKey_(meetName);
+    var official = mk ? allResults.filter(function (x) { return x.meetKey === mk; }) : [];
+
     return {
       timestamp: r['タイムスタンプ'] || null,
-      meetName: pick(r, TAIKAI_LABELS.meetName),
-      meetDate: pick(r, TAIKAI_LABELS.meetDate),
+      meetName: meetName,
+      meetDate: meetDate,
       events: events,
       kojin: kojin,
       sync: sync,
+      official: official,
       common: {
         nextFunScope: pick(r, TAIKAI_LABELS.nextFunScope),
         nextFunText: pick(r, TAIKAI_LABELS.nextFunText),
