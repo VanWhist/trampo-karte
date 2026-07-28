@@ -166,6 +166,22 @@
   .hero-message-k { font-size: 11px; font-weight: 700; color: var(--gold-text); opacity: 0.72; margin-bottom: 3px; }
   .hero-message-line { font-size: 21px; font-weight: 700; color: var(--gold-text); line-height: 1.5; }
 
+  /* 大会公式リザルトの得点内訳（本人ページは個人のみ／コーチ用は個人・シンクロとも） */
+  .score-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+  .score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .score-tile { background: var(--accent-soft); border-radius: 10px; padding: 10px 11px; }
+  .score-head { font-size: 11.5px; font-weight: 700; color: var(--text-secondary); display: flex; align-items: center; gap: 5px; }
+  .score-sym { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 5px; background: var(--blue-450); color: #fff; font-size: 10.5px; font-weight: 800; flex: none; }
+  .score-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
+  .score-val { font-size: 21px; font-weight: 800; color: var(--blue-550); margin-top: 5px; line-height: 1.2; }
+  .score-max { font-size: 12.5px; font-weight: 700; color: var(--text-muted); }
+  .score-note { font-size: 10.5px; color: var(--text-muted); margin-top: 4px; line-height: 1.45; }
+  .score-legend { font-size: 11.5px; color: var(--text-secondary); margin-top: 10px; line-height: 1.55; }
+  .score-round-gap { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--gridline); }
+  .official-block { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--gridline); }
+  .official-head { font-size: 11.5px; font-weight: 700; color: var(--text-secondary); margin-bottom: 7px; display: flex; align-items: baseline; gap: 8px; }
+  .official-total { font-size: 12.5px; font-weight: 800; color: var(--blue-550); margin-left: auto; }
+
   /* できるようになったこと（本人ページ限定・新規） */
   .achieve-row { background: var(--green-soft); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
   .achieve-main { display: flex; align-items: flex-start; gap: 6px; }
@@ -771,24 +787,111 @@ function computeDiscrepancy(kojin, seasonGoalText) {
 }
 
 // コーチ用「大会振り返り」カードの1大会分の中身（最新の展開表示・過去分の折りたたみ展開の両方で使う）
+// 順位の表記ゆれを「7位」に揃える。既存行は「7位」、フォーム経由の新規入力は数値のみ。
+function fmtRank(v) {
+  if (v === null || v === undefined || v === "") return null;
+  var m = String(v).match(/\d+/);
+  return m ? m[0] + "位" : String(v);
+}
+
+// 大会公式リザルトの得点内訳（E/D/H/T）の表示メタ情報。
+// 分母を併記するのは満点が確認できているものだけ（E・H）。D と T は満点がないので、
+// 代わりに「なぜ満点がないか」を一行添える。ここを誤ると本人が自分の点数を読み違える。
+var SCORE_PARTS = [
+  { key: "E", label: "実施点", sub: "演技のきれいさ", maxKey: "EMax" },
+  { key: "D", label: "難度点", sub: "技のむずかしさ", note: "満点なし。むずかしい技を入れるほど上がります" },
+  { key: "H", label: "水平移動", sub: "真ん中で跳べたか", maxKey: "HMax" },
+  { key: "T", label: "跳躍時間", sub: "高さ（空中にいた時間）", note: "満点なし。1秒が1点です" },
+  { key: "synchro", label: "同時性", sub: "ペアとそろっていたか" }
+];
+
+// 得点内訳のタイル群。値が入っている項目だけを出す（空欄は「未回答／未入力」として静かに畳む）。
+function renderScoreTiles(o) {
+  var tiles = SCORE_PARTS.map(function (p) {
+    var v = o[p.key];
+    if (v === null || v === undefined || v === "") return "";
+    var maxHtml = (p.maxKey && o[p.maxKey] != null) ? '<span class="score-max"> / ' + escHtml(o[p.maxKey]) + '</span>' : "";
+    return '<div class="score-tile">' +
+      '<div class="score-head"><span class="score-sym">' + escHtml(p.key === "synchro" ? "S" : p.key) + '</span>' + escHtml(p.label) + '</div>' +
+      '<div class="score-sub">' + escHtml(p.sub) + '</div>' +
+      '<div class="score-val">' + escHtml(v) + maxHtml + '</div>' +
+      (p.note ? '<div class="score-note">' + escHtml(p.note) + '</div>' : "") +
+      '</div>';
+  }).join("");
+  return tiles ? '<div class="score-grid">' + tiles + '</div>' : "";
+}
+
+// 本人ページ限定・新規: 大会公式リザルトの得点内訳（個人競技のみ）。
+// 順位・総得点は出さない（実装指示書§2-6のとおり）。内訳だけを出すのは2026-07-27の決定による。
+// シンクロを出さないのは、個人E満点20・シンクロE満点10と満点が異なり、並べると
+// 16.4が7.85に落ちたと誤読される余地が残るため（コーチ用には出す）。
+function renderScoreBreakdownCard(name) {
+  var tc = taikaiCache[name];
+  if (!tc || tc.status !== "loaded" || !tc.data || !tc.data.records) return "";
+  // 得点内訳のある大会を新しい順に探す（大会ごとの行として持っているので、
+  // 推移表示に切り替えるときはこの絞り込みを外して描画を変えるだけで済む）。
+  var rec = null, kojinRows = null;
+  for (var i = 0; i < tc.data.records.length; i++) {
+    var rows = (tc.data.records[i].official || []).filter(function (x) { return x.event !== "シンクロ"; });
+    if (rows.length) { rec = tc.data.records[i]; kojinRows = rows; break; }
+  }
+  if (!kojinRows) return "";
+  // 該当する個人の行は「決勝だけ」などと決め打ちせず、予選・決勝ともそのまま並べる。
+  // 予選と決勝が別日開催の大会があるので、日付はラウンドごとに出す。
+  var blocks = kojinRows.map(function (o, idx) {
+    var meta = [rec.meetName, fmtDateOnly(o.meetDate) || fmtDateOnly(rec.meetDate), o.round].filter(Boolean).join("・");
+    return '<div' + (idx > 0 ? ' class="score-round-gap"' : '') + '>' +
+      (meta ? '<div class="score-meta">' + escHtml(meta) + '</div>' : "") +
+      renderScoreTiles(o) + '</div>';
+  }).join("");
+  var body = blocks +
+    '<div class="score-legend">大会の点数は、この4つを合計したものです。きれいさとむずかしさは、べつべつに点がつきます。1つの数字ではなく、どこが伸びたかで見ていこう。</div>';
+  return cardWrap("", "大会の得点の中身", body);
+}
+
 function renderTaikaiRecordBody(r, seasonGoalText) {
   var kojin = r.kojin, sync = r.sync;
   var tiles = "";
   if (kojin) {
-    tiles += '<div class="goal-tile"><div class="k">個人・順位/点数</div><div class="v">' + escHtml(kojin.rank || "-") + " / " + escHtml(kojin.score != null ? kojin.score : "-") + '</div></div>';
+    tiles += '<div class="goal-tile"><div class="k">個人・順位/点数</div><div class="v">' + escHtml(fmtRank(kojin.rank) || "-") + " / " + escHtml(kojin.score != null ? kojin.score : "-") + '</div></div>';
     tiles += '<div class="goal-tile"><div class="k">結果への満足度</div><div class="v">' + escHtml(kojin.resultScore != null ? kojin.resultScore + "点" : "-") + '</div></div>';
     tiles += '<div class="goal-tile"><div class="k">演技内容への満足度</div><div class="v">' + escHtml(kojin.contentScore != null ? kojin.contentScore + "点" : "-") + '</div></div>';
   }
   if (sync) {
-    tiles += '<div class="goal-tile"><div class="k">シンクロ・順位/点数</div><div class="v">' + escHtml(sync.rank || "-") + " / " + escHtml(sync.score != null ? sync.score : "-") + '</div></div>';
+    tiles += '<div class="goal-tile"><div class="k">シンクロ・順位/点数</div><div class="v">' + escHtml(fmtRank(sync.rank) || "-") + " / " + escHtml(sync.score != null ? sync.score : "-") + '</div></div>';
   }
   var tilesHtml = tiles ? '<div class="goal-grid">' + tiles + '</div>' : "";
 
   var discrepancy = computeDiscrepancy(kojin, seasonGoalText);
   var alertHtml = discrepancy ? '<div class="taikai-alert">' + escHtml(discrepancy.join("。") + "。結果と自己評価が大きく離れています。") + '</div>' : "";
 
+  // 大会公式リザルト（sporttech.io からの転記）。個人・シンクロとも出す。
+  // 本人ページは個人のみだが、コーチは満点差（個人E20点・シンクロE10点）を理解したうえで
+  // 読めるので、シンクロの内訳もここに出し、本人に伝えるかどうかはコーチが判断する。
+  var officialRows = r.official || [];
+  var officialHtml = officialRows.length ? officialRows.map(function (o) {
+    var head = [o.event, o.round, fmtDateOnly(o.meetDate)].filter(Boolean).join("・");
+    var totalBits = [];
+    if (o.rank != null) totalBits.push(fmtRank(o.rank));
+    if (o.total != null) totalBits.push(o.total + "点");
+    return '<div class="official-block">' +
+      '<div class="official-head">公式リザルト' + (head ? "（" + escHtml(head) + "）" : "") +
+      (totalBits.length ? '<span class="official-total">' + escHtml(totalBits.join(" / ")) + '</span>' : "") + '</div>' +
+      renderScoreTiles(o) +
+      (o.L != null ? '<div class="score-note">L ' + escHtml(o.L) + '（実施減点の一部。すでにEに含まれているため総得点から別途引かない）</div>' : "") +
+      (o.sourceUrl ? '<div class="score-note"><a class="mandala-link" href="' + escHtml(o.sourceUrl) + '" target="_blank" rel="noopener">公式記録を開く →</a></div>' : "") +
+      '</div>';
+  }).join("")
+  // 名前＋大会名で一致する行がないときは、黙って消さずに未登録であることを明示する
+  // （空欄なのか転記漏れなのかがコーチ画面で区別できなくなるため）。
+  : '<div class="official-block"><div class="official-head">公式リザルト</div>' +
+    '<div class="mandala-empty">公式リザルト未登録（大会公式リザルトタブに、この大会名の行がありません）</div></div>';
+
   var fields = [];
   if (kojin) {
+    if (kojin.goalAchieved) fields.push(["大会前の目標の達成度", kojin.goalAchieved]);
+    if (kojin.scoreFocus) fields.push(["自己採点で一番気になった観点", kojin.scoreFocus]);
+    if (kojin.mainIssue) fields.push(["一番の課題（本人の見立て）", kojin.mainIssue]);
     if (kojin.feeling) fields.push(["演技はどうだった", kojin.feeling]);
     if (kojin.improve) fields.push(["悔しかったこと・改善したいこと", kojin.improve]);
     if (kojin.scoreReason) fields.push(["点数の理由", kojin.scoreReason]);
@@ -812,7 +915,7 @@ function renderTaikaiRecordBody(r, seasonGoalText) {
     ? '<div class="taikai-footer"><div class="k">本人ページにも出している言葉</div>' + escHtml(shownToPlayer.join(" / ")) + '</div>'
     : "";
 
-  return tilesHtml + alertHtml + fieldsHtml + footerHtml;
+  return tilesHtml + alertHtml + officialHtml + fieldsHtml + footerHtml;
 }
 
 // コーチ用限定・新規: 大会振り返りの全項目。最新の大会は展開表示、過去分はタップで折りたたみ展開。
@@ -1130,6 +1233,7 @@ function render() {
       renderHero(current) +
       renderFocusCard(current) +
       renderAchievementsCard(current) +
+      renderScoreBreakdownCard(current) +
       renderAboutCard(current) +
       renderVisionCard(current) +
       renderGoalsCard(current) +
