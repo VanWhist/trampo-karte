@@ -172,8 +172,7 @@
   .score-tile { background: var(--accent-soft); border-radius: 10px; padding: 10px 11px; }
   .score-head { font-size: 11.5px; font-weight: 700; color: var(--text-secondary); display: flex; align-items: center; gap: 5px; }
   .score-sym { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 5px; background: var(--blue-450); color: #fff; font-size: 10.5px; font-weight: 800; flex: none; }
-  .score-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
-  .score-val { font-size: 21px; font-weight: 800; color: var(--blue-550); margin-top: 5px; line-height: 1.2; }
+  .score-val { font-size: 21px; font-weight: 800; color: var(--blue-550); margin-top: 6px; line-height: 1.2; }
   .score-max { font-size: 12.5px; font-weight: 700; color: var(--text-muted); }
   .score-note { font-size: 10.5px; color: var(--text-muted); margin-top: 4px; line-height: 1.45; }
   .score-legend { font-size: 11.5px; color: var(--text-secondary); margin-top: 10px; line-height: 1.55; }
@@ -797,12 +796,16 @@ function fmtRank(v) {
 // 大会公式リザルトの得点内訳（E/D/H/T）の表示メタ情報。
 // 分母を併記するのは満点が確認できているものだけ（E・H）。D と T は満点がないので、
 // 代わりに「なぜ満点がないか」を一行添える。ここを誤ると本人が自分の点数を読み違える。
+// 項目名は日本体操協会「トランポリン採点規則」の日本語表記に合わせる（規則18）。
+//   D=難度得点／E=演技に対する得点／H=移動（Horizontal displacement）／
+//   T=跳躍時間に対する得点／S=同時性に対する得点
+// 話し言葉の言い換え（「演技のきれいさ」等）は、本人ページ・コーチ用とも出さない（2026-07-29 Vanさん指示）。
 var SCORE_PARTS = [
-  { key: "E", label: "実施点", sub: "演技のきれいさ", maxKey: "EMax" },
-  { key: "D", label: "難度点", sub: "技のむずかしさ", note: "満点なし。むずかしい技を入れるほど上がります" },
-  { key: "H", label: "水平移動", sub: "真ん中で跳べたか", maxKey: "HMax" },
-  { key: "T", label: "跳躍時間", sub: "高さ（空中にいた時間）", note: "満点なし。1秒が1点です" },
-  { key: "synchro", label: "同時性", sub: "ペアとそろっていたか", maxKey: "synchroMax" }
+  { key: "E", label: "演技点", maxKey: "EMax" },
+  { key: "D", label: "難度点", note: "満点なし。むずかしい技を入れるほど上がります" },
+  { key: "H", label: "水平移動点", maxKey: "HMax" },
+  { key: "T", label: "跳躍時間点", note: "満点なし。1秒が1点です" },
+  { key: "synchro", label: "同時性点", maxKey: "synchroMax" }
 ];
 
 // 得点内訳のタイル群。値が入っている項目だけを出す（空欄は「未回答／未入力」として静かに畳む）。
@@ -813,7 +816,6 @@ function renderScoreTiles(o) {
     var maxHtml = (p.maxKey && o[p.maxKey] != null) ? '<span class="score-max"> / ' + escHtml(o[p.maxKey]) + '</span>' : "";
     return '<div class="score-tile">' +
       '<div class="score-head"><span class="score-sym">' + escHtml(p.key === "synchro" ? "S" : p.key) + '</span>' + escHtml(p.label) + '</div>' +
-      '<div class="score-sub">' + escHtml(p.sub) + '</div>' +
       '<div class="score-val">' + escHtml(v) + maxHtml + '</div>' +
       (p.note ? '<div class="score-note">' + escHtml(p.note) + '</div>' : "") +
       '</div>';
@@ -878,6 +880,12 @@ function renderTaikaiRecordBody(r, seasonGoalText) {
       '<div class="official-head">公式リザルト' + (head ? "（" + escHtml(head) + "）" : "") +
       (totalBits.length ? '<span class="official-total">' + escHtml(totalBits.join(" / ")) + '</span>' : "") + '</div>' +
       renderScoreTiles(o) +
+      // 満点は「1種目あたりの満点 × 有効種目数」で出している（CoP §15.4）。10種目でないときと、
+      // S1〜S10から検算できず分母を伏せたときは、その理由をコーチに明示する。
+      (o.elements != null && o.elements !== 10 && o.maxVerified
+        ? '<div class="score-note">有効種目数 ' + escHtml(o.elements) + '（10種目に満たないため、E・H・S の満点も種目数に応じて下がっています）</div>' : "") +
+      (o.E != null && o.EMax == null
+        ? '<div class="score-note">満点は未確定（S1〜S10とLからE を検算できなかったため、分母を伏せています）</div>' : "") +
       (o.L != null ? '<div class="score-note">L ' + escHtml(o.L) + '（実施減点の一部。すでにEに含まれているため総得点から別途引かない）</div>' : "") +
       (o.sourceUrl ? '<div class="score-note"><a class="mandala-link" href="' + escHtml(o.sourceUrl) + '" target="_blank" rel="noopener">公式記録を開く →</a></div>' : "") +
       '</div>';
