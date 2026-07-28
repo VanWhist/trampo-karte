@@ -132,14 +132,18 @@ var TAIKAI_LABELS = {
 // 大会公式リザルト（sporttech.io からの転記。回答スプレッドシート内の別タブ）
 // フォームの回答列に手動列を混ぜると壊れやすいため別タブにしている。
 var TAIKAI_RESULT_SHEET = '大会公式リザルト';
-// 得点内訳の満点。分母を併記できるのは満点が確認できているものだけ。
-//  E … 個人20点・シンクロ10点満点からの減点方式（日本体操協会の採点解説、および
-//      E = 満点 −(S1〜S10合計 + L)/10 の実データ5件での検算一致で確認）
-//  H … 10点満点からの減点方式（日本体操協会の採点解説で確認、瑛斗の実データ9.3とも矛盾なし）
-//  D … 加点方式で上限なし（難しい技を入れるほど上がる）
-//  T … 跳躍時間そのもの（1秒1点）で上限なし
-//  Synchro（同時性）… 公式ルール上は10点満点とされるが、実データ18.6と一致せず未確認のため分母を出さない
-var TAIKAI_RESULT_MAX = { E_kojin: 20, E_sync: 10, H: 10 };
+// 得点内訳の満点。出典は FIG Code of Points 2025-2028（Trampoline Gymnastics, Part I）。
+//   §17.2.9.1 個人：   Score = E(max 20) + H(max 10) + D + T − P
+//   §17.2.9.2 シンクロ：Score = E(max 10) + H(max 10) + S(max 20) + D − P
+//  E … 減点方式。個人は20点満点（§17.2.3.2）、シンクロは10点満点（§17.2.3.3）。
+//  H … 10点満点からの減点方式（§17.2.4.2）。
+//  S（同時性）… 10点満点から減点し、その値を2倍したものがスコア（§17.2.6.2）。つまり満点は20点。
+//      実データ 18.6（= (10 − 0.7) × 2）とも一致する。
+//  D … 加点方式で上限なし（難しい技を入れるほど上がる）。
+//  T … 跳躍時間そのもの（1秒1点）で上限なし。
+// 注意：§15.4 により、演技が中断された場合などは CJP が有効種目数を決め、E・H・S の満点が
+// これより小さくなることがある。10種目を完遂した通常の演技ではこの値でよい。
+var TAIKAI_RESULT_MAX = { E_kojin: 20, E_sync: 10, H: 10, S: 20 };
 // 競技について（これまでフォームには回答があるのにAPI・画面のどちらにも出ていなかった項目、2026-07-25追加）
 var SEASON_ABOUT_LABELS = {
   startedWhen: 'トランポリンはいつから始めましたか',
@@ -329,6 +333,7 @@ function readTaikaiResults_(ss, name) {
         HMax: TAIKAI_RESULT_MAX.H,
         T: isSync ? null : numOrNull_(r['T']),          // T と Synchro は別列。個人行はSynchro空欄、
         synchro: isSync ? numOrNull_(r['Synchro']) : null, // シンクロ行はT空欄。1列に兼用しない。
+        synchroMax: isSync ? TAIKAI_RESULT_MAX.S : null,
         L: numOrNull_(r['L']),
         P: numOrNull_(r['P']),
         sourceUrl: r['ソースURL'] || null
