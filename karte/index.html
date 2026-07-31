@@ -22,6 +22,8 @@
     --gold-text: #8a6400;
     --green-soft: #eaf7ef;
     --green-line: #1f9d55;
+    --red-soft: #fdecea;
+    --red-line: #c8372d;
     --focus-soft: #fef1e6;
     --focus-line: #d1720a;
     --focus-text: #8a4a00;
@@ -238,6 +240,48 @@
   .log-row .sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
   .log-row .stat { font-size: 12px; color: var(--blue-550); font-weight: 700; white-space: nowrap; }
 
+  /* airlog: 記録一覧に出す 本数ぶんの成功/失敗 */
+  .mark-row { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+  .mark { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+  .mark.ok { background: var(--green-soft); color: var(--green-line); }
+  .mark.ng { background: var(--red-soft); color: var(--red-line); }
+  .mark.none { background: var(--page); color: var(--text-muted); }
+  .legacy-tag { font-size: 10px; color: var(--text-muted); background: var(--page); padding: 1px 6px; border-radius: 6px; margin-left: 5px; }
+
+  /* airlog: よく使う技のクイック選択 */
+  .chip.tappable { cursor: pointer; border: 1px solid transparent; }
+  .chip.tappable:active { opacity: 0.6; }
+  .chip.tappable.on { background: var(--blue-450); color: #fff; }
+
+  /* airlog: 本数ステッパー */
+  .rep-step { display: flex; align-items: center; gap: 14px; margin-top: 5px; }
+  .rep-step button {
+    width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--gridline);
+    background: var(--page); font-size: 20px; font-weight: 700; font-family: inherit;
+    color: var(--text-primary); cursor: pointer; line-height: 1;
+  }
+  .rep-step button:disabled { color: var(--text-muted); opacity: 0.5; cursor: default; }
+  .rep-step .num { font-size: 22px; font-weight: 700; min-width: 32px; text-align: center; }
+  .rep-step .num.zero { color: var(--text-muted); }
+  .rep-step .unit { font-size: 12px; color: var(--text-muted); }
+  .rep-hint { font-size: 11.5px; color: var(--text-muted); background: var(--page); border-radius: 8px; padding: 7px 9px; margin-top: 8px; line-height: 1.5; }
+
+  /* airlog: 本数ぶんの 成功/失敗 えらぶ行 */
+  .rep-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .rep-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--gridline); border-radius: 10px; padding: 7px 9px; }
+  .rep-item .idx { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  .rep-item .picks { display: flex; gap: 5px; }
+  .pick {
+    font-size: 12px; font-weight: 700; font-family: inherit; padding: 6px 11px; border-radius: 8px;
+    border: 1px solid var(--gridline); background: var(--surface-1); color: var(--text-muted); cursor: pointer;
+  }
+  .pick:active { opacity: 0.6; }
+  .pick.ok.on { background: var(--green-soft); border-color: var(--green-line); color: var(--green-line); }
+  .pick.ng.on { background: var(--red-soft); border-color: var(--red-line); color: var(--red-line); }
+  .pick.soon { border-style: dashed; opacity: 0.55; cursor: default; }
+  .player-mode .rep-item .idx { font-size: 13px; }
+  .player-mode .pick { font-size: 13px; padding: 7px 12px; }
+
   /* notes thread */
   .note-bubble { max-width: 82%; padding: 8px 11px; border-radius: 13px; font-size: 13.5px; line-height: 1.5; margin-bottom: 6px; }
   .note-bubble.self { background: var(--blue-450); color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
@@ -284,7 +328,10 @@ var taikaiCache = {};
 var taikaiExpanded = {}; // name -> {idx: bool} 過去の大会振り返りの展開状態（コーチ用）
 
 var airlogFormOpen = {};  // name -> bool
-var airlogDraft = {};     // name -> {group, skill, custom, reps, success, memo, videoUrl}
+// name -> {group, skill, custom, reps(数値), results(配列), memo, videoUrl}
+// results は本数ぶんの配列で、各要素は "success" / "fail" / null（未選択）。任意入力なので null があり得る。
+var airlogDraft = {};
+var AIRLOG_QUICK_MAX = 5; // 「よく使う技」に出す数
 var noteDraft = {};       // name -> テキスト
 var fatalMessage = null;
 
@@ -419,28 +466,87 @@ window.mandalaBack = function () {
   render();
 };
 
+function newAirlogDraft() {
+  return { group: SKILL_GROUPS[0].label, skill: SKILL_GROUPS[0].skills[0], custom: "", reps: 0, results: [], memo: "", videoUrl: "" };
+}
+// 記録済みのログから、最近使った技を新しい順に重複なく取り出す（①よく使う技）
+function recentTechniques(name) {
+  var c = airlogCache[name];
+  if (!c || c.status !== "loaded") return [];
+  var records = (c.data && c.data.records) || [];
+  var seen = {}, out = [];
+  for (var i = 0; i < records.length && out.length < AIRLOG_QUICK_MAX; i++) {
+    var t = (records[i].technique || "").trim();
+    if (!t || seen[t]) continue;
+    seen[t] = true;
+    out.push(t);
+  }
+  return out;
+}
+function airlogTechniqueOf(d) {
+  return d.skill === "自由入力" ? (d.custom || "").trim() : (d.skill || "");
+}
+
 window.toggleAirlogForm = function () {
   airlogFormOpen[current] = !airlogFormOpen[current];
-  if (!airlogDraft[current]) airlogDraft[current] = { group: SKILL_GROUPS[0].label, skill: SKILL_GROUPS[0].skills[0], custom: "", reps: "", success: "", memo: "", videoUrl: "" };
+  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft();
   render();
 };
 window.setAirlogField = function (field, value) {
-  if (!airlogDraft[current]) airlogDraft[current] = {};
+  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft();
   airlogDraft[current][field] = value;
   if (field === "group") {
     var g = SKILL_GROUPS.filter(function (x) { return x.label === value; })[0];
     airlogDraft[current].skill = g ? g.skills[0] : "";
   }
 };
+// ①「よく使う技」のチップを押したとき。カタログにある技なら分類プルダウンも合わせて切り替え、
+// 無ければ（過去に自由入力した技名など）自由入力として復元する。
+window.pickAirlogSkill = function (idx) {
+  var list = recentTechniques(current);
+  var t = list[idx];
+  if (!t) return;
+  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft();
+  var d = airlogDraft[current];
+  var hit = null;
+  SKILL_GROUPS.forEach(function (g) {
+    if (g.skills.indexOf(t) !== -1 && !hit) hit = g.label;
+  });
+  if (hit) { d.group = hit; d.skill = t; d.custom = ""; }
+  else { d.group = "その他"; d.skill = "自由入力"; d.custom = t; }
+  render();
+};
+// ②本数の増減。0本まで下げられる（跳ばなかった日も記録として残せるようにするため）。
+window.stepAirlogReps = function (delta) {
+  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft();
+  var d = airlogDraft[current];
+  var next = (Number(d.reps) || 0) + delta;
+  if (next < 0) next = 0;
+  if (next > 100) next = 100;
+  d.reps = next;
+  if (!d.results) d.results = [];
+  // 減らしたぶんの成功/失敗は捨て、増やしたぶんは未選択で足す
+  if (d.results.length > next) d.results = d.results.slice(0, next);
+  while (d.results.length < next) d.results.push(null);
+  render();
+};
+// ②成功/失敗の選択。同じものをもう一度押すと未選択に戻せる（任意入力のため）。
+window.setAirlogResult = function (idx, value) {
+  var d = airlogDraft[current];
+  if (!d || !d.results || idx >= d.results.length) return;
+  d.results[idx] = (d.results[idx] === value) ? null : value;
+  render();
+};
 window.saveAirlogEntry = function () {
   var d = airlogDraft[current] || {};
-  var technique = d.skill === "自由入力" ? (d.custom || "").trim() : d.skill;
+  var technique = airlogTechniqueOf(d);
   if (!technique) { alert("技名を入力してください"); return; }
-  if (!d.reps) { alert("本数を入力してください"); return; }
-  apiPost({ type: "addAirlog", token: tokenFor(current), technique: technique, reps: d.reps, success: d.success, memo: d.memo, videoUrl: d.videoUrl })
+  var reps = Number(d.reps) || 0; // 0本も有効な記録として送る
+  apiPost({ type: "addAirlog", token: tokenFor(current), technique: technique, reps: reps, results: (d.results || []).slice(0, reps), memo: d.memo, videoUrl: d.videoUrl })
     .then(function (res) {
       if (res.error) { alert("保存に失敗しました: " + res.error); return; }
       delete airlogCache[current];
+      delete airlogDraft[current];
       airlogFormOpen[current] = false;
       loadAirlog(current);
       render();
@@ -1143,6 +1249,41 @@ function renderStgCard(name) {
   return cardWrap("", "短期目標（月次振り返り）", body, "stg");
 }
 
+// 記録一覧の1行。
+// 「結果」がある行（2026-07-31以降）は本数ぶんの ○/× を並べ、無い行（旧形式）は従来どおり成功数を出す。
+function renderAirlogRow(r) {
+  var results = r.results || "";
+  var reps = Number(r.reps);
+  if (isNaN(reps)) reps = 0;
+
+  var statHtml, markHtml = "";
+  if (results) {
+    var ok = 0, marked = 0;
+    for (var i = 0; i < results.length; i++) {
+      if (results.charAt(i) === "○") { ok++; marked++; }
+      else if (results.charAt(i) === "×") { marked++; }
+    }
+    statHtml = marked ? ok + "/" + reps : reps + "本";
+    markHtml = '<div class="mark-row">' + results.split("").map(function (ch) {
+      if (ch === "○") return '<span class="mark ok">成功</span>';
+      if (ch === "×") return '<span class="mark ng">失敗</span>';
+      return '<span class="mark none">−</span>';
+    }).join("") + '</div>';
+  } else if (reps === 0 && String(r.reps) === "0") {
+    statHtml = "0本";
+  } else {
+    // 旧形式（成功数のみ）
+    var rate = (r.reps && r.success) ? Math.round((r.success / r.reps) * 100) + "%" : "";
+    statHtml = escHtml(r.success === "" || r.success === null || r.success === undefined ? "-" : r.success) + "/" + escHtml(r.reps || "-") +
+      (rate ? ' <span class="muted">' + rate + '</span>' : '');
+  }
+
+  return '<div class="log-row"><div><div class="main">' + escHtml(r.technique) + '</div>' +
+    '<div class="sub">' + escHtml(fmtDate(r.timestamp)) + (r.memo ? " ・ " + escHtml(r.memo) : "") + '</div>' +
+    markHtml + '</div>' +
+    '<div class="stat">' + statHtml + '</div></div>';
+}
+
 function renderAirlogCard(name) {
   var c = airlogCache[name];
   var listHtml;
@@ -1152,14 +1293,11 @@ function renderAirlogCard(name) {
     var records = (c.data && c.data.records) || [];
     if (!records.length) listHtml = '<div class="muted">まだ記録がありません</div>';
     else {
-      listHtml = records.slice(0, 15).map(function (r) {
-        var rate = (r.reps && r.success) ? Math.round((r.success / r.reps) * 100) + "%" : "";
-        return '<div class="log-row"><div><div class="main">' + escHtml(r.technique) + '</div><div class="sub">' + escHtml(fmtDate(r.timestamp)) + (r.memo ? " ・ " + escHtml(r.memo) : "") + '</div></div><div class="stat">' + escHtml(r.success || "-") + '/' + escHtml(r.reps || "-") + (rate ? ' <span class="muted">' + rate + '</span>' : '') + '</div></div>';
-      }).join("");
+      listHtml = records.slice(0, 15).map(renderAirlogRow).join("");
     }
   }
   var open = !!airlogFormOpen[name];
-  var draft = airlogDraft[name] || { group: SKILL_GROUPS[0].label, skill: SKILL_GROUPS[0].skills[0] };
+  var draft = airlogDraft[name] || newAirlogDraft();
   var formHtml = "";
   if (open) {
     var groupOpts = SKILL_GROUPS.map(function (g) {
@@ -1169,13 +1307,53 @@ function renderAirlogCard(name) {
     var skillOpts = curGroup.skills.map(function (s) {
       return '<option value="' + escHtml(s) + '"' + (s === draft.skill ? " selected" : "") + '>' + escHtml(s) + '</option>';
     }).join("");
+
+    // ①よく使う技（最近の記録から自動で出す）。技名は属性に直接埋めず、番号で渡してエスケープ事故を避ける。
+    var recent = recentTechniques(name);
+    var curTech = airlogTechniqueOf(draft);
+    var quickHtml = "";
+    if (recent.length) {
+      quickHtml = '<label class="lbl">よく使う技</label><div class="chip-row">' +
+        recent.map(function (t, i) {
+          return '<span class="chip tappable' + (t === curTech ? " on" : "") + '" onclick="pickAirlogSkill(' + i + ')">' + escHtml(t) + '</span>';
+        }).join("") + '</div>';
+    }
+
+    // ②本数（0本も選べる）＋ 本数ぶんの成功/失敗
+    var reps = Number(draft.reps) || 0;
+    var results = draft.results || [];
+    var stepHtml =
+      '<label class="lbl">本数</label>' +
+      '<div class="rep-step">' +
+      '<button type="button" onclick="stepAirlogReps(-1)"' + (reps <= 0 ? " disabled" : "") + '>−</button>' +
+      '<span class="num' + (reps === 0 ? " zero" : "") + '">' + reps + '</span>' +
+      '<button type="button" onclick="stepAirlogReps(1)">＋</button>' +
+      '<span class="unit">本</span>' +
+      '</div>';
+    if (reps === 0) {
+      stepHtml += '<div class="rep-hint">0本のままでも保存できます（跳ばなかった日の記録として残せます）。</div>';
+    } else {
+      var rows = "";
+      for (var i = 0; i < reps; i++) {
+        var v = results[i] || null;
+        rows +=
+          '<div class="rep-item"><span class="idx">' + (i + 1) + '本目</span><span class="picks">' +
+          '<button type="button" class="pick ok' + (v === "success" ? " on" : "") + '" onclick="setAirlogResult(' + i + ', \'success\')">成功</button>' +
+          '<button type="button" class="pick ng' + (v === "fail" ? " on" : "") + '" onclick="setAirlogResult(' + i + ', \'fail\')">失敗</button>' +
+          '<button type="button" class="pick soon" disabled>ヨレ</button>' +
+          '</span></div>';
+      }
+      stepHtml += '<div class="rep-list">' + rows + '</div>' +
+        '<div class="rep-hint">成功・失敗は選ばなくても保存できます。選んだものをもう一度押すと取り消せます。</div>';
+    }
+
     formHtml =
       '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gridline);">' +
+      quickHtml +
       '<label class="lbl">技の分類</label><select onchange="setAirlogField(\'group\', this.value); render()">' + groupOpts + '</select>' +
       '<label class="lbl">技</label><select onchange="setAirlogField(\'skill\', this.value); render()">' + skillOpts + '</select>' +
       (draft.skill === "自由入力" ? '<label class="lbl">技名（自由入力）</label><input type="text" value="' + escHtml(draft.custom || "") + '" oninput="setAirlogField(\'custom\', this.value)">' : "") +
-      '<label class="lbl">本数</label><input type="number" value="' + escHtml(draft.reps || "") + '" oninput="setAirlogField(\'reps\', this.value)">' +
-      '<label class="lbl">成功数（かかり）</label><input type="number" value="' + escHtml(draft.success || "") + '" oninput="setAirlogField(\'success\', this.value)">' +
+      stepHtml +
       '<label class="lbl">メモ</label><textarea oninput="setAirlogField(\'memo\', this.value)">' + escHtml(draft.memo || "") + '</textarea>' +
       '<label class="lbl">動画URL（任意）</label><input type="url" value="' + escHtml(draft.videoUrl || "") + '" oninput="setAirlogField(\'videoUrl\', this.value)">' +
       '<div class="btn-row"><button class="btn btn-primary" onclick="saveAirlogEntry()">保存</button><button class="btn btn-ghost" onclick="toggleAirlogForm()">キャンセル</button></div>' +
