@@ -30,8 +30,14 @@
  *   （その場合はフォームの質問文とこのヘッダーの対応関係を doc/デプロイ手順.md 参照）。
  *   最新の行（タイムスタンプ最大）をそのまま「現在の短期目標」として返す。
  *
- * ■ 技記録ログ  （ヘッダー行）: id | タイムスタンプ | 名前 | 技 | 本数 | 成功数 | メモ | 動画URL
+ * ■ 技記録ログ  （ヘッダー行）: id | タイムスタンプ | 名前 | 技 | 本数 | 成功数 | 結果 | メモ | 動画URL
  *   カルテ画面から選手本人が追加する（POST）。
+ *   「結果」は本数ぶんの成功/失敗を1文字ずつ並べた文字列（2026-07-31追加）。
+ *     ○ = 成功 / × = 失敗 / - = どちらも選ばなかった（任意入力のため未選択があり得る）
+ *     例) 3本で1本目成功・2本目未選択・3本目失敗 → "○-×" ／ 0本のときは空文字
+ *   「成功数」は「結果」の ○ の個数を保存時に自動集計したもの（集計・過去データとの互換のため残す）。
+ *     1本も○×を選ばなかった場合は空欄（「0本成功だった」と「記録していない」を区別するため）。
+ *   「結果」列が空で「成功数」だけがある行は2026-07-31より前の旧形式。カルテ側で従来表示にフォールバックする。
  *
  * ■ コーチメモ  （ヘッダー行）: id | タイムスタンプ | 名前 | 発信者 | 本文
  *   発信者は "本人" または "コーチ"。カルテ画面から追加する（POST）。
@@ -47,6 +53,17 @@ var SHEET_ROSTER = '名簿';
 var SHEET_STG = '短期目標';
 var SHEET_AIRLOG = '技記録ログ';
 var SHEET_COACHNOTES = 'コーチメモ';
+
+// 技記録ログの列（この順で ensureHeaders_ が不足分をシートに追加する）
+var AIRLOG_HEADERS = ['id', 'タイムスタンプ', '名前', '技', '本数', '成功数', '結果', 'メモ', '動画URL'];
+
+// 「結果」列の記号。1本ぶん＝1文字。
+var AIRLOG_MARK_SUCCESS = '○';
+var AIRLOG_MARK_FAIL = '×';
+var AIRLOG_MARK_NONE = '-';
+
+// 1回の記録で受け付ける本数の上限（誤送信・不正値でシートが荒れるのを防ぐための保険）
+var AIRLOG_MAX_REPS = 100;
 
 // MICの「目標設定シート」Googleフォームを瑛斗颯斗用にコピーした際の回答スプレッドシートID
 var SEASON_FORM_SS_ID = '1Xezq36_rQNOXxralFgeWdJTL7bpA_wLtFqSFCgBt3kc';
@@ -188,6 +205,23 @@ function appendRow_(name, obj, headers) {
   var sh = getSheet_(name);
   var row = headers.map(function (h) { return obj[h] !== undefined ? obj[h] : ''; });
   sh.appendRow(row);
+}
+
+// シートのヘッダー行に足りない列だけを右端に追加し、実際のヘッダー並びを返す。
+// 既存の列は移動も改名もしない（過去データの列位置を壊さないため）。
+// これにより「結果」列を手作業で足さなくても、初回の保存時に自動で用意される。
+function ensureHeaders_(name, headers) {
+  var sh = getSheet_(name);
+  var lastCol = sh.getLastColumn();
+  var existing = lastCol > 0 ? sh.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  // 右端の空セルは列として数えない
+  while (existing.length && String(existing[existing.length - 1]).trim() === '') existing.pop();
+
+  var missing = headers.filter(function (h) { return existing.indexOf(h) === -1; });
+  if (!missing.length) return existing;
+
+  sh.getRange(1, existing.length + 1, 1, missing.length).setValues([missing]);
+  return existing.concat(missing);
 }
 
 function jsonOut_(obj) {
@@ -534,6 +568,34 @@ function handleStg_(e) {
   };
 }
 
+// 本数を0以上の整数にそろえる。0本も「跳ばなかった」という有効な記録として扱うので、
+// 空文字や不正値と 0 を混同しないこと（`body.reps || 0` のような書き方をすると 0 が消える）。
+function toRepCount_(v) {
+  if (v === '' || v === null || v === undefined) return 0;
+  var n = Number(v);
+  if (isNaN(n) || n < 0) return 0;
+  n = Math.floor(n);
+  return n > AIRLOG_MAX_REPS ? AIRLOG_MAX_REPS : n;
+}
+
+// ['success', null, 'fail'] のような配列を "○-×" の文字列にする。長さは必ず本数と一致させる。
+function encodeAirlogResults_(list, reps) {
+  var out = '';
+  for (var i = 0; i < reps; i++) {
+    var v = (list && list[i]) || null;
+    if (v === 'success') out += AIRLOG_MARK_SUCCESS;
+    else if (v === 'fail') out += AIRLOG_MARK_FAIL;
+    else out += AIRLOG_MARK_NONE;
+  }
+  return out;
+}
+
+function countMark_(results, mark) {
+  var n = 0;
+  for (var i = 0; i < results.length; i++) if (results.charAt(i) === mark) n++;
+  return n;
+}
+
 function handleAirlogGet_(e) {
   var name = findAthleteNameByToken_(e.parameter.token);
   if (!name) return { error: 'invalid_token' };
@@ -548,6 +610,8 @@ function handleAirlogGet_(e) {
       technique: r['技'],
       reps: r['本数'],
       success: r['成功数'],
+      // 本数ぶんの成功/失敗（"○-×"）。旧形式の行では空文字になり、カルテ側は成功数の表示に戻る。
+      results: r['結果'] === undefined || r['結果'] === null ? '' : String(r['結果']),
       memo: r['メモ'] || '',
       videoUrl: r['動画URL'] || ''
     };
@@ -674,17 +738,28 @@ function doPost(e) {
 function handleAirlogAdd_(body) {
   var name = findAthleteNameByToken_(body.token);
   if (!name) return { error: 'invalid_token' };
+
+  var reps = toRepCount_(body.reps);
+  var results = encodeAirlogResults_(body.results, reps);
+  var marked = countMark_(results, AIRLOG_MARK_SUCCESS) + countMark_(results, AIRLOG_MARK_FAIL);
+  // 1本も○×を選ばなかったときは成功数を空欄にする。
+  // 0 を入れてしまうと「全部失敗した」のか「成功/失敗を記録しなかった」のか後から区別できないため。
+  var successCount = marked > 0 ? countMark_(results, AIRLOG_MARK_SUCCESS) : '';
+
   var row = {
     'id': uid_('a_'),
     'タイムスタンプ': new Date(),
     '名前': name,
     '技': body.technique || '',
-    '本数': body.reps || '',
-    '成功数': body.success || '',
+    '本数': reps,          // 0本もそのまま 0 として保存する
+    '成功数': successCount,
+    '結果': results,
     'メモ': body.memo || '',
     '動画URL': body.videoUrl || ''
   };
-  appendRow_(SHEET_AIRLOG, row, ['id', 'タイムスタンプ', '名前', '技', '本数', '成功数', 'メモ', '動画URL']);
+  // 「結果」列がまだ無いシートでも、ここで自動的にヘッダーが追加される
+  var headers = ensureHeaders_(SHEET_AIRLOG, AIRLOG_HEADERS);
+  appendRow_(SHEET_AIRLOG, row, headers);
   return { ok: true };
 }
 
