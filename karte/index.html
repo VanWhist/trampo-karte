@@ -466,8 +466,23 @@ window.mandalaBack = function () {
   render();
 };
 
-function newAirlogDraft() {
-  return { group: SKILL_GROUPS[0].label, skill: SKILL_GROUPS[0].skills[0], custom: "", reps: 0, results: [], memo: "", videoUrl: "" };
+// 技名をドラフトに反映する。カタログにある技なら分類も合わせて切り替え、
+// 無ければ（過去に自由入力した技名など）自由入力として復元する。
+function applyTechniqueToDraft(d, technique) {
+  var hit = null;
+  SKILL_GROUPS.forEach(function (g) {
+    if (g.skills.indexOf(technique) !== -1 && !hit) hit = g.label;
+  });
+  if (hit) { d.group = hit; d.skill = technique; d.custom = ""; }
+  else { d.group = "その他"; d.skill = "自由入力"; d.custom = technique; }
+  return d;
+}
+// 新しい記録の入力欄。技は「最後に使った技」を初期値にする（同じ技を続けて記録することが多いため）。
+// まだ記録が無い／読み込み中のときはカタログの先頭に戻す。
+function newAirlogDraft(name) {
+  var d = { group: SKILL_GROUPS[0].label, skill: SKILL_GROUPS[0].skills[0], custom: "", reps: 0, results: [], memo: "", videoUrl: "" };
+  var last = recentTechniques(name)[0];
+  return last ? applyTechniqueToDraft(d, last) : d;
 }
 // 記録済みのログから、最近使った技を新しい順に重複なく取り出す（①よく使う技）
 function recentTechniques(name) {
@@ -489,11 +504,11 @@ function airlogTechniqueOf(d) {
 
 window.toggleAirlogForm = function () {
   airlogFormOpen[current] = !airlogFormOpen[current];
-  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft();
+  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft(current);
   render();
 };
 window.setAirlogField = function (field, value) {
-  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft();
+  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft(current);
   airlogDraft[current][field] = value;
   if (field === "group") {
     var g = SKILL_GROUPS.filter(function (x) { return x.label === value; })[0];
@@ -503,22 +518,15 @@ window.setAirlogField = function (field, value) {
 // ①「よく使う技」のチップを押したとき。カタログにある技なら分類プルダウンも合わせて切り替え、
 // 無ければ（過去に自由入力した技名など）自由入力として復元する。
 window.pickAirlogSkill = function (idx) {
-  var list = recentTechniques(current);
-  var t = list[idx];
+  var t = recentTechniques(current)[idx];
   if (!t) return;
-  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft();
-  var d = airlogDraft[current];
-  var hit = null;
-  SKILL_GROUPS.forEach(function (g) {
-    if (g.skills.indexOf(t) !== -1 && !hit) hit = g.label;
-  });
-  if (hit) { d.group = hit; d.skill = t; d.custom = ""; }
-  else { d.group = "その他"; d.skill = "自由入力"; d.custom = t; }
+  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft(current);
+  applyTechniqueToDraft(airlogDraft[current], t);
   render();
 };
 // ②本数の増減。0本まで下げられる（跳ばなかった日も記録として残せるようにするため）。
 window.stepAirlogReps = function (delta) {
-  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft();
+  if (!airlogDraft[current]) airlogDraft[current] = newAirlogDraft(current);
   var d = airlogDraft[current];
   var next = (Number(d.reps) || 0) + delta;
   if (next < 0) next = 0;
@@ -1297,7 +1305,7 @@ function renderAirlogCard(name) {
     }
   }
   var open = !!airlogFormOpen[name];
-  var draft = airlogDraft[name] || newAirlogDraft();
+  var draft = airlogDraft[name] || newAirlogDraft(name);
   var formHtml = "";
   if (open) {
     var groupOpts = SKILL_GROUPS.map(function (g) {
